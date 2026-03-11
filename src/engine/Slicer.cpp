@@ -58,7 +58,6 @@ bool Slicer::loadComputeShader(const char* path)
         return false;
     }
 
-    locTheta_ = glGetUniformLocation(computeProg_, "uTheta");
     return true;
 }
 
@@ -66,19 +65,19 @@ bool Slicer::init(const char* shaderPath)
 {
     if (!loadComputeShader(shaderPath)) return false;
 
-    // Create 2D output image texture (128 x 64, RGBA8)
+    // Create 2D-array output image texture (128 x 64 x SLICE_COUNT, RGBA8)
     glGenTextures(1, &sliceOutTex_);
-    glBindTexture(GL_TEXTURE_2D, sliceOutTex_);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SLICE_W, SLICE_H,
+    glBindTexture(GL_TEXTURE_2D_ARRAY, sliceOutTex_);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8, SLICE_W, SLICE_H, SLICE_COUNT,
                  0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, 0);
 
-    // Create pixel pack buffer for CPU readback
+    // Create pixel pack buffer for a single whole-array CPU readback
     glGenBuffers(1, &pbo_);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
-    glBufferData(GL_PIXEL_PACK_BUFFER, SLICE_W * SLICE_H * 4,
+    glBufferData(GL_PIXEL_PACK_BUFFER, SLICE_W * SLICE_H * SLICE_COUNT * 4,
                  nullptr, GL_STREAM_READ);
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
@@ -92,7 +91,7 @@ bool Slicer::init(const char* shaderPath)
 }
 
 // -----------------------------------------------------------------------
-// Dispatch compute for 120 angles, readback each slice into buf
+// Dispatch compute for all 120 angles in one call, readback entire array
 // -----------------------------------------------------------------------
 void Slicer::sliceAll(GLuint voxelTexID, SliceBuffer& buf)
 {
@@ -102,33 +101,28 @@ void Slicer::sliceAll(GLuint voxelTexID, SliceBuffer& buf)
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_3D, voxelTexID);
 
-    // Bind 2D output image to image unit 1 (write-only, RGBA8)
-    glBindImageTexture(1, sliceOutTex_, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+    // Bind 2D-array output image to image unit 1 (layered write, RGBA8)
+    glBindImageTexture(1, sliceOutTex_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_RGBA8);
 
-    for (int i = 0; i < SLICE_COUNT; ++i) {
-        float theta = (float)(i * 2.0 * M_PI / SLICE_COUNT);
-        glUniform1f(locTheta_, theta);
+    // Single dispatch covering all 128×64×SLICE_COUNT invocations
+    glDispatchCompute(2, 16, SLICE_COUNT);
 
-        // Dispatch: 2x16x1 workgroups, local_size 64x4 = 128x64 total
-        glDispatchCompute(2, 16, 1);
+    // Barrier: ensure image writes are visible for texture read
+    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
+                  | GL_TEXTURE_UPDATE_BARRIER_BIT);
 
-        // Barrier: ensure image writes are visible for texture read
-        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
-                      | GL_TEXTURE_UPDATE_BARRIER_BIT);
+    // Single readback of the entire array via PBO
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
+    glGetTextureImage(sliceOutTex_, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                      SLICE_W * SLICE_H * SLICE_COUNT * 4, 0);
+    glFinish();
 
-        // Readback via PBO
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
-        glGetTextureImage(sliceOutTex_, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                          SLICE_W * SLICE_H * 4, 0);
-        glFinish();
-
-        void* ptr = glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
-        if (ptr) {
-            memcpy(buf.data[i], ptr, SLICE_W * SLICE_H * 4);
-            glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
-        }
-        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    void* ptr = glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
+    if (ptr) {
+        memcpy(buf.data, ptr, SLICE_W * SLICE_H * SLICE_COUNT * 4);
+        glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
     }
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
     glUseProgram(0);
 }
