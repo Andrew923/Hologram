@@ -29,8 +29,6 @@ private:
     bool loadComputeShader(const char* path);
 
     GLuint computeProg_  = 0;  // Compute shader program
-    GLuint sliceOutTex_  = 0;  // 2D RGBA8 128x64 output image
+    GLuint sliceOutTex_  = 0;  // 2D-array RGBA8 128x64xSLICE_COUNT output image
     GLuint pbo_          = 0;  // Pixel pack buffer for async readback
-
-    GLint  locTheta_     = -1; // Uniform location for uTheta
 };
