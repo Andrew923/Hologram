@@ -76,6 +76,7 @@ static void usage(const char* prog)
         "  --app       Application to run (default: cube)\n"
         "  --ip        Target IP address of Raspberry Pi (default: 192.168.1.100)\n"
         "  --port      Target UDP port (default: 4210)\n"
+        "  --obj       Path to .obj file (required for wireframe app)\n"
         "  --no-docker Skip launching the Docker hand tracker sidecar\n",
         prog);
 }
@@ -90,23 +91,26 @@ int main(int argc, char* argv[])
     char     targetIP[64]  = "192.168.1.100";
     uint16_t targetPort    = 4210;
     bool     noDocker      = false;
+    char     objPath[256]  = "";
 
     // Parse CLI
     static const struct option longopts[] = {
         {"app",       required_argument, nullptr, 'a'},
         {"ip",        required_argument, nullptr, 'i'},
         {"port",      required_argument, nullptr, 'p'},
+        {"obj",       required_argument, nullptr, 'o'},
         {"no-docker", no_argument,       nullptr, 'n'},
         {"help",      no_argument,       nullptr, 'h'},
         {nullptr, 0, nullptr, 0}
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "a:i:p:nh", longopts, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "a:i:p:o:nh", longopts, nullptr)) != -1) {
         switch (c) {
             case 'a': strncpy(appName, optarg, sizeof(appName)-1); break;
             case 'i': strncpy(targetIP, optarg, sizeof(targetIP)-1); break;
             case 'p': targetPort = (uint16_t)atoi(optarg); break;
+            case 'o': strncpy(objPath, optarg, sizeof(objPath)-1); break;
             case 'n': noDocker = true; break;
             case 'h': usage(argv[0]); return 0;
             default:  usage(argv[0]); return 1;
@@ -150,7 +154,7 @@ int main(int argc, char* argv[])
     CubeApp      cubeApp;
     HandApp      handApp(network);
     PongApp      pongApp;
-    WireframeApp wireframeApp;
+    WireframeApp wireframeApp(objPath);
     FluidApp     fluidApp;
 
     if      (strcmp(appName, "cube")      == 0) app = &cubeApp;
