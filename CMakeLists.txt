@@ -27,11 +27,13 @@ set(ENGINE_SOURCES
     src/engine/Slicer.cpp
     src/engine/Network.cpp
     src/engine/InputBridge.cpp
+    src/engine/ObjLoader.cpp
 )
 
 set(APP_SOURCES
     src/application/CubeApp.cpp
     src/application/HandApp.cpp
+    src/application/WireframeApp.cpp
 )
 
 add_executable(hologram
