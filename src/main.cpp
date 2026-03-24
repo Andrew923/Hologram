@@ -74,7 +74,7 @@ static void usage(const char* prog)
     fprintf(stderr,
         "Usage: %s --app <cube|hand|pong|wireframe|fluid> --ip <pi_ip> --port <port>\n"
         "  --app       Application to run (default: cube)\n"
-        "  --ip        Target IP address of Raspberry Pi (default: 192.168.1.100)\n"
+        "  --ip        Target IP address of Raspberry Pi (default: 10.42.0.168)\n"
         "  --port      Target UDP port (default: 4210)\n"
         "  --obj       Path to .obj file (required for wireframe app)\n"
         "  --no-docker Skip launching the Docker hand tracker sidecar\n",
@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
 {
     // Defaults
     char     appName[32]   = "cube";
-    char     targetIP[64]  = "192.168.1.100";
+    char     targetIP[64]  = "10.42.0.168";
     uint16_t targetPort    = 4210;
     bool     noDocker      = false;
     char     objPath[256]  = "";
