@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
+#include <initializer_list>
 
 // constexpr definitions (required in some C++17 contexts)
 constexpr int HandApp::CONNECTIONS[20][2];

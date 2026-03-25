@@ -66,15 +66,26 @@ def main():
         print("hand_tracker: timed out waiting for shared memory, exiting", flush=True)
         sys.exit(1)
 
-    # 2. Open camera
-    cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
+    # 2. Open camera — retry for up to 30 s (device may appear after container starts)
+    cap = None
+    cam_deadline = time.monotonic() + 30.0
+    while time.monotonic() < cam_deadline and _running:
+        c = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
+        if c.isOpened():
+            cap = c
+            break
+        c.release()
+        print("hand_tracker: waiting for /dev/video0...", flush=True)
+        time.sleep(1.0)
+
+    if cap is None or not cap.isOpened():
+        print("hand_tracker: could not open camera after 30 s, exiting", flush=True)
+        writer.close()
+        sys.exit(1)
+
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
     cap.set(cv2.CAP_PROP_BUFFERSIZE,   CAM_BUFFER)
-    if not cap.isOpened():
-        print("hand_tracker: failed to open /dev/video0", flush=True)
-        writer.close()
-        sys.exit(1)
 
     # 3. Initialize MediaPipe Hands
     mp_hands = mp.solutions.hands

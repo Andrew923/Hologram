@@ -2,10 +2,27 @@
 #include <cstdlib>
 #include <cstring>
 #include <csignal>
+#include <string>
+#include <vector>
 #include <unistd.h>
+#include <libgen.h>
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <getopt.h>
+
+// Derive project root from running executable (<root>/build/<name> → <root>)
+static std::string getHologramRoot()
+{
+    char exe[4096] = {};
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (n <= 0) return "/root/Hologram";
+    exe[n] = '\0';
+    char tmp[4096];
+    strncpy(tmp, exe, sizeof(tmp));
+    char* buildDir   = dirname(tmp);
+    char* projectDir = dirname(buildDir);
+    return std::string(projectDir);
+}
 
 #include "../shared_defs.h"
 #include "engine/Renderer.h"
@@ -38,23 +55,38 @@ static void sigHandler(int /*sig*/)
 // -----------------------------------------------------------------------
 static pid_t launchDocker()
 {
-    const char* args[] = {
+    static std::string root     = getHologramRoot();
+    static std::string volMount = root + ":/Hologram";
+
+    std::vector<const char*> args = {
         "docker", "run", "--runtime", "nvidia", "--rm", "--network", "host",
         "--ipc=host",          // REQUIRED: shares /dev/shm with host
         "--privileged",
+        "-e", "PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python",
         "-v", "/var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket",
         "-v", "/root/jetson-containers/data:/data",
-        "-v", "/root/Hologram:/Hologram",
-        "--device", "/dev/video0",
+        "-v", volMount.c_str(),
+    };
+
+    // Only map the video device if it exists on the host
+    if (access("/dev/video0", F_OK) == 0) {
+        args.push_back("--device");
+        args.push_back("/dev/video0");
+        fprintf(stderr, "main: /dev/video0 found, passing to container\n");
+    } else {
+        fprintf(stderr, "main: /dev/video0 not found, container will search at runtime\n");
+    }
+
+    args.insert(args.end(), {
         "hand-pose-v5",
         "python3", "/Hologram/python/hand_tracker.py",
         nullptr
-    };
+    });
 
     pid_t pid = fork();
     if (pid == 0) {
         // Child: exec docker
-        execvp("docker", (char* const*)args);
+        execvp("docker", (char* const*)args.data());
         perror("execvp docker");
         _exit(1);
     }

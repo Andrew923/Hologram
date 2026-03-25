@@ -58,6 +58,11 @@ target_link_libraries(hologram PRIVATE
     rt          # for shm_open / shm_unlink
 )
 
+# --- test_shm_reader: standalone shared-memory monitor (no GL deps) ---
+add_executable(test_shm_reader src/test_shm_reader.cpp)
+target_include_directories(test_shm_reader PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(test_shm_reader PRIVATE rt)
+
 # --- Copy shaders next to binary ---
 configure_file(src/shaders/slice_compute.glsl
                ${CMAKE_BINARY_DIR}/shaders/slice_compute.glsl COPYONLY)
