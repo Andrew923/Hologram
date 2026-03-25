@@ -1,7 +1,6 @@
 #pragma once
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-#include <GL/glew.h>
+#include <epoxy/gl.h>
+#include <epoxy/egl.h>
 #include <cstdint>
 
 // Voxel grid dimensions: 128(X) x 64(Y) x 128(Z)
