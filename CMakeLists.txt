@@ -9,7 +9,8 @@ set(OpenGL_GL_PREFERENCE GLVND)
 
 # --- Find packages ---
 find_package(OpenGL REQUIRED COMPONENTS OpenGL EGL)
-find_package(GLEW   REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(epoxy REQUIRED IMPORTED_TARGET epoxy)
 find_package(Threads REQUIRED)
 
 # --- Compiler flags ---
@@ -46,14 +47,14 @@ add_executable(hologram
 target_include_directories(hologram PRIVATE
     ${CMAKE_SOURCE_DIR}          # for shared_defs.h
     ${OPENGL_INCLUDE_DIR}
-    ${GLEW_INCLUDE_DIRS}
+    ${epoxy_INCLUDE_DIRS}
 )
 
 # --- Link libraries ---
 target_link_libraries(hologram PRIVATE
     OpenGL::OpenGL
     OpenGL::EGL
-    GLEW::GLEW
+    PkgConfig::epoxy
     Threads::Threads
     rt          # for shm_open / shm_unlink
 )
@@ -72,4 +73,4 @@ configure_file(src/shaders/fluid_sim.glsl
 # Print build summary
 message(STATUS "OpenGL libraries : ${OPENGL_LIBRARIES}")
 message(STATUS "EGL library      : ${OpenGL_EGL_LIBRARIES}")
-message(STATUS "GLEW library     : ${GLEW_LIBRARIES}")
+message(STATUS "epoxy library    : ${epoxy_LIBRARIES}")

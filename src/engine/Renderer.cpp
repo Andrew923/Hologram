@@ -112,15 +112,7 @@ bool Renderer::initEGL()
 // -----------------------------------------------------------------------
 bool Renderer::initGL()
 {
-    // GLEW must be initialized after making the context current
-    glewExperimental = GL_TRUE;
-    GLenum glewErr = glewInit();
-    if (glewErr != GLEW_OK) {
-        fprintf(stderr, "Renderer: glewInit failed: %s\n", glewGetErrorString(glewErr));
-        return false;
-    }
-    // Drain any spurious GL error from glewInit
-    while (glGetError() != GL_NO_ERROR) {}
+    // libepoxy resolves GL function pointers lazily — no init call needed
 
     fprintf(stderr, "Renderer: GL vendor: %s\n", glGetString(GL_VENDOR));
     fprintf(stderr, "Renderer: GL renderer: %s\n", glGetString(GL_RENDERER));

@@ -12,6 +12,12 @@ InputBridge::~InputBridge() { shutdown(); }
 bool InputBridge::init(bool creator)
 {
     creator_ = creator;
+
+    if (creator) {
+        // Remove any stale segment from a previous run (ignore if absent)
+        shm_unlink(HOLOGRAM_SHM_NAME);
+    }
+
     int flags = creator ? (O_CREAT | O_RDWR) : O_RDWR;
     fd_ = shm_open(HOLOGRAM_SHM_NAME, flags, 0666);
     if (fd_ < 0) {
@@ -20,6 +26,8 @@ bool InputBridge::init(bool creator)
     }
 
     if (creator) {
+        // Ensure 0666 permissions regardless of umask
+        fchmod(fd_, 0666);
         if (ftruncate(fd_, sizeof(SharedHandData)) < 0) {
             perror("InputBridge: ftruncate");
             close(fd_);
