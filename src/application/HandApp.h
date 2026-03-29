@@ -1,5 +1,6 @@
 #pragma once
 #include "IApplication.h"
+#include "GestureDetector.h"
 #include "../engine/Network.h"
 #include <cstdint>
 #include <cmath>
@@ -77,6 +78,14 @@ private:
     float smoothX_[21] = {};
     float smoothY_[21] = {};
     bool  anyValid_ = false;
+
+    // Clamped palm anchor: keeps skeleton near the canvas interior.
+    // posX_ ∈ [16, 112],  posY_ ∈ [8, 56]  (initialized to canvas center)
+    float posX_ = 64.0f;
+    float posY_ = 32.0f;
+
+    // Gesture tracking: print to terminal on each change
+    Gesture lastGesture_ = Gesture::NONE;
 
     // 128×64 BGR canvas
     uint8_t canvas_[64 * 128 * 3] = {};
