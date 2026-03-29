@@ -18,7 +18,7 @@ private:
     float rotX_   = 0.0f;
     float rotY_   = 0.0f;
     float rotZ_   = 0.0f;
-    float scale_  = 1.0f;   // 0.3 – 2.0 range
+    float scale_  = 1.0f;   // clamped to ~16–32 px tall
     float posX_   = 0.0f;   // voxel-space X offset, clamped to ±8
     float posY_   = 0.0f;   // voxel-space Y offset, clamped to ±8
 

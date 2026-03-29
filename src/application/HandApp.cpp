@@ -2,6 +2,7 @@
 #include "../engine/Renderer.h"
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 #include <ctime>
 #include <initializer_list>
 
@@ -66,10 +67,25 @@ void HandApp::setup(Renderer& /*renderer*/)
     }
 }
 
+static inline float clampf(float x, float lo, float hi) {
+    return x < lo ? lo : (x > hi ? hi : x);
+}
+
 void HandApp::update(const SharedHandData& hand)
 {
     anyValid_ = false;
-    if (!hand.hand_detected) return;
+    if (!hand.hand_detected) {
+        // Drift palm anchor back to canvas center (mirrors CubeApp drift)
+        posX_ += (64.0f - posX_) * 0.02f;
+        posY_ += (32.0f - posY_) * 0.02f;
+
+        if (lastGesture_ != Gesture::NONE) {
+            printf("[gesture] NONE\n");
+            fflush(stdout);
+            lastGesture_ = Gesture::NONE;
+        }
+        return;
+    }
 
     // Check wrist is non-zero
     if (hand.lm_x[0] == 0.0f && hand.lm_y[0] == 0.0f) return;
@@ -85,6 +101,23 @@ void HandApp::update(const SharedHandData& hand)
         smoothX_[i] = filtersX_[i].filter(rawX, t);
         smoothY_[i] = filtersY_[i].filter(rawY, t);
     }
+
+    // Palm center clamping (mirrors CubeApp logic, adapted for 128×64 canvas).
+    // posX_ stays within [16, 112], posY_ within [8, 56] — 16 px margin on each edge.
+    float palmX  = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
+    float palmY  = (hand.lm_y[0] + hand.lm_y[9]) * 0.5f;
+    float tgtPosX = clampf(palmX * 128.0f, 16.0f, 112.0f);
+    float tgtPosY = clampf(palmY *  64.0f,  8.0f,  56.0f);
+    posX_ += (tgtPosX - posX_) * 0.3f;
+    posY_ += (tgtPosY - posY_) * 0.3f;
+
+    // Gesture detection — print to terminal on change
+    Gesture g = detectGesture(hand);
+    if (g != lastGesture_) {
+        printf("[gesture] %s\n", gestureName(g));
+        fflush(stdout);
+        lastGesture_ = g;
+    }
 }
 
 void HandApp::draw(Renderer& /*renderer*/)
@@ -93,11 +126,18 @@ void HandApp::draw(Renderer& /*renderer*/)
     memset(canvas_, 0, sizeof(canvas_));
 
     if (anyValid_) {
+        // Compute offset so the palm anchor sits at (posX_, posY_).
+        // This shifts the whole skeleton to keep the palm within the canvas margin.
+        float palCX = (smoothX_[0] + smoothX_[9]) * 0.5f;
+        float palCY = (smoothY_[0] + smoothY_[9]) * 0.5f;
+        float offX  = posX_ - palCX;
+        float offY  = posY_ - palCY;
+
         // Draw skeleton connections (white bones)
         for (auto& conn : CONNECTIONS) {
             int j1 = conn[0], j2 = conn[1];
-            int px1 = (int)smoothX_[j1], py1 = (int)smoothY_[j1];
-            int px2 = (int)smoothX_[j2], py2 = (int)smoothY_[j2];
+            int px1 = (int)(smoothX_[j1] + offX), py1 = (int)(smoothY_[j1] + offY);
+            int px2 = (int)(smoothX_[j2] + offX), py2 = (int)(smoothY_[j2] + offY);
             // Skip if both endpoints are at origin (undetected)
             if ((px1 == 0 && py1 == 0) || (px2 == 0 && py2 == 0)) continue;
             drawLine(canvas_, px1, py1, px2, py2, 255, 255, 255);
@@ -105,8 +145,8 @@ void HandApp::draw(Renderer& /*renderer*/)
 
         // Draw joints
         for (int i = 0; i < 21; ++i) {
-            int px = (int)smoothX_[i];
-            int py = (int)smoothY_[i];
+            int px = (int)(smoothX_[i] + offX);
+            int py = (int)(smoothY_[i] + offY);
             if (px == 0 && py == 0) continue;
 
             if (isFingertip(i)) {

@@ -28,6 +28,11 @@ static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
+// Scale limits: cube height = scale * (VOXEL_H - 1) pixels.
+// Clamp to ~16 px (min) and ~32 px (max) on the 64-voxel Y axis.
+static constexpr float SCALE_MIN = 16.0f / (VOXEL_H - 1);  // ≈ 0.254
+static constexpr float SCALE_MAX = 32.0f / (VOXEL_H - 1);  // ≈ 0.508
+
 // -----------------------------------------------------------------------
 // Rotation helpers
 // -----------------------------------------------------------------------
@@ -124,7 +129,8 @@ void CubeApp::update(const SharedHandData& hand)
 
     float pinch   = hypotf(hand.lm_x[4] - hand.lm_x[8],
                            hand.lm_y[4] - hand.lm_y[8]);
-    float tgtScale = 0.3f + clampf((pinch - 0.03f) / 0.22f, 0.0f, 1.0f) * 1.7f;
+    float tgtScale = SCALE_MIN + clampf((pinch - 0.03f) / 0.22f, 0.0f, 1.0f)
+                                 * (SCALE_MAX - SCALE_MIN);
 
     // Position offset: palm center clamped to ±8 voxels (= ±4px on 64x32 display)
     float palmX   = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
@@ -137,6 +143,7 @@ void CubeApp::update(const SharedHandData& hand)
     rotY_  += (tgtRotY  - rotY_)  * 0.3f;
     rotZ_  += (tgtRotZ  - rotZ_)  * 0.3f;
     scale_ += (tgtScale - scale_) * 0.3f;
+    scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
     posX_  += (tgtPosX  - posX_)  * 0.3f;
     posY_  += (tgtPosY  - posY_)  * 0.3f;
 }
