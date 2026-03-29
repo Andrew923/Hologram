@@ -28,10 +28,16 @@ static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
-// Scale limits: cube height = scale * (VOXEL_H - 1) pixels.
-// Clamp to ~16 px (min) and ~32 px (max) on the 64-voxel Y axis.
-static constexpr float SCALE_MIN = 16.0f / (VOXEL_H - 1);  // ≈ 0.254
-static constexpr float SCALE_MAX = 32.0f / (VOXEL_H - 1);  // ≈ 0.508
+// -----------------------------------------------------------------------
+// Tunable demo variables
+// -----------------------------------------------------------------------
+static constexpr float SCALE_MIN_PX     = 8.0f;   // minimum cube height in pixels
+static constexpr float SCALE_MAX_PX     = 24.0f;  // maximum cube height in pixels
+static constexpr float SMOOTHING_FACTOR = 0.3f;   // exponential smoothing for rot/scale/pos (0=frozen, 1=instant)
+
+// Derived scale limits (cube height = scale * (VOXEL_H - 1) pixels)
+static constexpr float SCALE_MIN = SCALE_MIN_PX / (VOXEL_H - 1);
+static constexpr float SCALE_MAX = SCALE_MAX_PX / (VOXEL_H - 1);
 
 // -----------------------------------------------------------------------
 // Rotation helpers
@@ -138,14 +144,14 @@ void CubeApp::update(const SharedHandData& hand)
     float tgtPosX = clampf((palmX - 0.5f) * (float)VOXEL_W, -8.0f, 8.0f);
     float tgtPosY = clampf((palmY - 0.5f) * (float)VOXEL_H, -8.0f, 8.0f);
 
-    // Exponential smoothing — factor 0.3 matches cube.py smoothing_factor
-    rotX_  += (tgtRotX  - rotX_)  * 0.3f;
-    rotY_  += (tgtRotY  - rotY_)  * 0.3f;
-    rotZ_  += (tgtRotZ  - rotZ_)  * 0.3f;
-    scale_ += (tgtScale - scale_) * 0.3f;
+    // Exponential smoothing — controlled by SMOOTHING_FACTOR above
+    rotX_  += (tgtRotX  - rotX_)  * SMOOTHING_FACTOR;
+    rotY_  += (tgtRotY  - rotY_)  * SMOOTHING_FACTOR;
+    rotZ_  += (tgtRotZ  - rotZ_)  * SMOOTHING_FACTOR;
+    scale_ += (tgtScale - scale_) * SMOOTHING_FACTOR;
     scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
-    posX_  += (tgtPosX  - posX_)  * 0.3f;
-    posY_  += (tgtPosY  - posY_)  * 0.3f;
+    posX_  += (tgtPosX  - posX_)  * SMOOTHING_FACTOR;
+    posY_  += (tgtPosY  - posY_)  * SMOOTHING_FACTOR;
 }
 
 void CubeApp::draw(Renderer& renderer)
