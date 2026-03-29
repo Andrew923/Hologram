@@ -14,11 +14,13 @@ public:
     bool bypassSlicer() const               override { return false; }
 
 private:
-    // Current smoothed rotation angles (radians) and scale
+    // Current smoothed rotation angles (radians), scale, and position offset
     float rotX_   = 0.0f;
     float rotY_   = 0.0f;
     float rotZ_   = 0.0f;
     float scale_  = 1.0f;   // 0.3 – 2.0 range
+    float posX_   = 0.0f;   // voxel-space X offset, clamped to ±8
+    float posY_   = 0.0f;   // voxel-space Y offset, clamped to ±8
 
     // Apply rotation matrix (Rz*Ry*Rx) to a vertex, return rotated x,y,z
     void rotate(const float v[3], float out[3]) const;

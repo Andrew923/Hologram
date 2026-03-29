@@ -108,7 +108,11 @@ void CubeApp::setup(Renderer& /*renderer*/) {}
 
 void CubeApp::update(const SharedHandData& hand)
 {
-    if (!hand.hand_detected) return;
+    if (!hand.hand_detected) {
+        posX_ *= 0.98f;   // slow exponential drift back to center (~3s at 60fps)
+        posY_ *= 0.98f;
+        return;
+    }
 
     // MediaPipe joint indices (native order):
     // 0=wrist, 5=index_mcp, 9=middle_mcp, 17=pinky_mcp, 4=thumb_tip, 8=index_tip
@@ -122,11 +126,19 @@ void CubeApp::update(const SharedHandData& hand)
                            hand.lm_y[4] - hand.lm_y[8]);
     float tgtScale = 0.3f + clampf((pinch - 0.03f) / 0.22f, 0.0f, 1.0f) * 1.7f;
 
+    // Position offset: palm center clamped to ±8 voxels (= ±4px on 64x32 display)
+    float palmX   = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
+    float palmY   = (hand.lm_y[0] + hand.lm_y[9]) * 0.5f;
+    float tgtPosX = clampf((palmX - 0.5f) * (float)VOXEL_W, -8.0f, 8.0f);
+    float tgtPosY = clampf((palmY - 0.5f) * (float)VOXEL_H, -8.0f, 8.0f);
+
     // Exponential smoothing — factor 0.3 matches cube.py smoothing_factor
     rotX_  += (tgtRotX  - rotX_)  * 0.3f;
     rotY_  += (tgtRotY  - rotY_)  * 0.3f;
     rotZ_  += (tgtRotZ  - rotZ_)  * 0.3f;
     scale_ += (tgtScale - scale_) * 0.3f;
+    posX_  += (tgtPosX  - posX_)  * 0.3f;
+    posY_  += (tgtPosY  - posY_)  * 0.3f;
 }
 
 void CubeApp::draw(Renderer& renderer)
@@ -148,8 +160,8 @@ void CubeApp::draw(Renderer& renderer)
         //   Model x ∈ [-1,1] * scale_ → voxel X ∈ [0, VOXEL_W-1]  (center at W/2)
         //   Model y ∈ [-1,1] * scale_ → voxel Y ∈ [0, VOXEL_H-1]  (center at H/2)
         //   Model z ∈ [-1,1] * scale_ → voxel Z ∈ [0, VOXEL_D-1]  (center at D/2)
-        transformed[vi][0] = (rot[0] * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1);
-        transformed[vi][1] = (rot[1] * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1);
+        transformed[vi][0] = (rot[0] * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1) + posX_;
+        transformed[vi][1] = (rot[1] * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1) + posY_;
         transformed[vi][2] = (rot[2] * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1);
     }
 
