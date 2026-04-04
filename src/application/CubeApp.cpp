@@ -33,7 +33,7 @@ static inline float clampf(float x, float lo, float hi) {
 // -----------------------------------------------------------------------
 static constexpr float SCALE_MIN_PX     = 8.0f;   // minimum cube height in pixels
 static constexpr float SCALE_MAX_PX     = 24.0f;  // maximum cube height in pixels
-static constexpr float SMOOTHING_FACTOR = 0.3f;   // exponential smoothing for rot/scale/pos (0=frozen, 1=instant)
+static constexpr float SMOOTHING_FACTOR = 0.1f;   // exponential smoothing for rot/scale/pos (0=frozen, 1=instant)
 
 // Derived scale limits (cube height = scale * (VOXEL_H - 1) pixels)
 static constexpr float SCALE_MIN = SCALE_MIN_PX / (VOXEL_H - 1);
