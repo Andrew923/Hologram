@@ -101,10 +101,19 @@ def main():
     # Pre-allocate zero arrays for when no hand is detected
     zero_lm = [0.0] * 21
 
+    consecutive_failures = 0
+    MAX_CONSECUTIVE_FAILURES = 10
+
     while _running:
         ret, frame = cap.read()
         if not ret or frame is None:
+            consecutive_failures += 1
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print(f"hand_tracker: camera read failed {MAX_CONSECUTIVE_FAILURES} times in a row, exiting", flush=True)
+                break
+            time.sleep(0.05)  # avoid hammering V4L2 on transient errors
             continue
+        consecutive_failures = 0
 
         # Mirror horizontally (matches cube.py and 2d_send.py)
         frame = cv2.flip(frame, 1)
