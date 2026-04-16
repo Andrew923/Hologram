@@ -221,27 +221,49 @@ int main(int argc, char* argv[])
     // ----------------------------------------------------------------
     // Main loop
     // ----------------------------------------------------------------
-    while (g_running) {
-        // Read hand data from shared memory (up to 8 retries)
-        inputBridge.read(handData, 8);
-
-        app->update(handData);
-
-        if (bypassSlicer) {
-            // HandApp sends UDP directly inside draw()
+    if (bypassSlicer) {
+        // HandApp path: sends UDP directly inside draw(), no slicer involved
+        while (g_running) {
+            inputBridge.read(handData, 8);
+            app->update(handData);
             app->draw(renderer);
-        } else {
-            // 3D app: render to voxels → slice → send 120 UDP packets
+        }
+    } else {
+        // 3D app path: pipeline GPU compute with UDP sending so the GPU works
+        // on frame N+1 while the CPU is sending frame N's packets.
+        //
+        // Timeline per iteration:
+        //   syncReadback()          — waits for GPU (should already be done)
+        //   update+draw+kickDispatch — ~3ms CPU work, kicks GPU for next frame
+        //   sendSlice() x SLICE_COUNT — 24ms; GPU computes concurrently
+        //
+        // Prime: render frame 0 and kick GPU before entering loop
+        inputBridge.read(handData, 8);
+        app->update(handData);
+        renderer.clearVoxels();
+        app->draw(renderer);
+        slicer.kickDispatch(renderer.getVoxelTextureID());
+
+        while (g_running) {
+            // Wait for GPU work kicked in the previous iteration
+            slicer.syncReadback(*sliceBuffer);
+
+            // Prepare next frame and kick GPU immediately
+            inputBridge.read(handData, 8);
+            app->update(handData);
             renderer.clearVoxels();
             app->draw(renderer);
+            slicer.kickDispatch(renderer.getVoxelTextureID());
 
-            slicer.sliceAll(renderer.getVoxelTextureID(), *sliceBuffer);
-
+            // Send current frame's slices (GPU computes next frame concurrently)
             for (int i = 0; i < SLICE_COUNT; ++i) {
                 network.sendSlice((uint8_t)i, &sliceBuffer->data[i][0][0][0]);
-                usleep(200);   // 0.2 ms throttle between slices
+                usleep(100);   // 240 x 0.1ms = 24ms total send window
             }
         }
+
+        // Drain the in-flight GPU work kicked on the last iteration
+        slicer.syncReadback(*sliceBuffer);
     }
 
     // ----------------------------------------------------------------

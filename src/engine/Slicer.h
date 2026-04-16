@@ -3,11 +3,11 @@
 #include <cstdint>
 #include <cstring>
 
-static constexpr int SLICE_COUNT = 120;
+static constexpr int SLICE_COUNT = 240;
 static constexpr int SLICE_W     = 128;
 static constexpr int SLICE_H     = 64;
 
-// Buffer holding all 120 slices of 128x64 RGBA8 data
+// Buffer holding all SLICE_COUNT slices of 128x64 RGBA8 data
 struct SliceBuffer {
     uint8_t data[SLICE_COUNT][SLICE_H][SLICE_W][4];
 };
@@ -20,8 +20,13 @@ public:
     // Load and compile slice_compute.glsl; create slice output texture + PBO
     bool init(const char* shaderPath);
 
-    // Dispatch compute shader for all 120 angles; fill sliceBuffer in place
-    void sliceAll(GLuint voxelTexID, SliceBuffer& buf);
+    // Phase 1: dispatch compute shader + initiate DMA to PBO; returns immediately.
+    // Call syncReadback() on a subsequent frame to retrieve the data.
+    void kickDispatch(GLuint voxelTexID);
+
+    // Phase 2: wait for GPU/DMA to complete and copy results into buf.
+    // Must be called after a prior kickDispatch().
+    void syncReadback(SliceBuffer& buf);
 
     void shutdown();
 

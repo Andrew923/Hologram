@@ -1,7 +1,7 @@
 #version 450 core
 layout(local_size_x = 64, local_size_y = 4, local_size_z = 1) in;
 
-#define SLICE_COUNT 120
+#define SLICE_COUNT 240
 #define M_PI 3.14159265358979323846  // slice angle math constant
 
 // 3D voxel grid sampler — 128(X) × 64(Y) × 128(Z), RGBA8
