@@ -6,8 +6,13 @@
 
 class WireframeApp : public IApplication {
 public:
-    explicit WireframeApp(const std::string& objPath = "");
+    WireframeApp() = default;
     ~WireframeApp() override = default;
+
+    // Load/replace the OBJ model. Safe to call before or after setup().
+    // Returns true on success. If called after setup(), geometry is
+    // hot-swapped for the next frame.
+    bool setModel(const std::string& objPath);
 
     void setup(Renderer&)                   override;
     void update(const SharedHandData& hand) override;
@@ -43,18 +48,9 @@ private:
 
     // --- Helpers ---
     void computeBBox();
-    void rotate(const float v[3], float out[3]) const;
 
     // Finger extension detection: true if fingertip is farther from wrist than MCP
     static bool isFingerExtended(const SharedHandData& hand, int tipIdx, int mcpIdx);
     // Distance between two landmarks
     static float landmarkDist(const SharedHandData& hand, int a, int b);
-
-    // Voxel painting (reused from CubeApp pattern)
-    static void paintVoxel(uint8_t* voxels, int x, int y, int z,
-                           uint8_t r, uint8_t g, uint8_t b);
-    static void paint3DLine(uint8_t* voxels,
-                            int x0, int y0, int z0,
-                            int x1, int y1, int z1,
-                            uint8_t r, uint8_t g, uint8_t b);
 };

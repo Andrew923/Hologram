@@ -22,15 +22,4 @@ private:
     float posX_   = 0.0f;   // voxel-space X offset, clamped to ±8
     float posY_   = 0.0f;   // voxel-space Y offset, clamped to ±8
 
-    // Apply rotation matrix (Rz*Ry*Rx) to a vertex, return rotated x,y,z
-    void rotate(const float v[3], float out[3]) const;
-
-    // Paint a 3D line segment into the voxel buffer using DDA
-    static void paint3DLine(uint8_t* voxels,
-                            int x0, int y0, int z0,
-                            int x1, int y1, int z1,
-                            uint8_t r, uint8_t g, uint8_t b);
-
-    static void paintVoxel(uint8_t* voxels, int x, int y, int z,
-                           uint8_t r, uint8_t g, uint8_t b);
 };
