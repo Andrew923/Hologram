@@ -1,4 +1,5 @@
 #include "CubeApp.h"
+#include "VoxelPaint.h"
 #include "../engine/Renderer.h"
 #include <cmath>
 #include <cstring>
@@ -38,79 +39,6 @@ static constexpr float SMOOTHING_FACTOR = 0.1f;   // exponential smoothing for r
 // Derived scale limits (cube height = scale * (VOXEL_H - 1) pixels)
 static constexpr float SCALE_MIN = SCALE_MIN_PX / (VOXEL_H - 1);
 static constexpr float SCALE_MAX = SCALE_MAX_PX / (VOXEL_H - 1);
-
-// -----------------------------------------------------------------------
-// Rotation helpers
-// -----------------------------------------------------------------------
-// Apply combined rotation R = Rz * Ry * Rx to vector v, store in out.
-// Matches np.dot(v, get_rotation_matrix(rx, ry, rz)) from cube.py.
-void CubeApp::rotate(const float v[3], float out[3]) const
-{
-    float cx = cosf(rotX_), sx = sinf(rotX_);
-    float cy = cosf(rotY_), sy = sinf(rotY_);
-    float cz = cosf(rotZ_), sz = sinf(rotZ_);
-
-    // R = Rz * Ry * Rx  (3x3 matrix, row-major)
-    // Row i of R combined = multiply out Rz*(Ry*Rx)
-    // Following cube.py conventions: np.dot(Rz, np.dot(Ry, Rx))
-    float R[3][3];
-    R[0][0] =  cy*cz;
-    R[0][1] =  cz*sx*sy - cx*sz;
-    R[0][2] =  cx*cz*sy + sx*sz;
-    R[1][0] =  cy*sz;
-    R[1][1] =  cx*cz + sx*sy*sz;
-    R[1][2] =  cx*sy*sz - cz*sx;
-    R[2][0] = -sy;
-    R[2][1] =  cy*sx;
-    R[2][2] =  cx*cy;
-
-    // np.dot(v, R) = v transposed times R = R^T * v (standard row-vec * matrix)
-    out[0] = v[0]*R[0][0] + v[1]*R[1][0] + v[2]*R[2][0];
-    out[1] = v[0]*R[0][1] + v[1]*R[1][1] + v[2]*R[2][1];
-    out[2] = v[0]*R[0][2] + v[1]*R[1][2] + v[2]*R[2][2];
-}
-
-// -----------------------------------------------------------------------
-// Voxel buffer helpers
-// -----------------------------------------------------------------------
-void CubeApp::paintVoxel(uint8_t* voxels, int x, int y, int z,
-                          uint8_t r, uint8_t g, uint8_t b)
-{
-    if (x < 0 || x >= VOXEL_W) return;
-    if (y < 0 || y >= VOXEL_H) return;
-    if (z < 0 || z >= VOXEL_D) return;
-    // Layout: data[(z*VOXEL_H + y)*VOXEL_W + x]  (each element 4 bytes RGBA)
-    int idx = ((z * VOXEL_H + y) * VOXEL_W + x) * 4;
-    voxels[idx + 0] = r;
-    voxels[idx + 1] = g;
-    voxels[idx + 2] = b;
-    voxels[idx + 3] = 255;
-}
-
-// 3D DDA line painter — interpolates along the dominant axis
-void CubeApp::paint3DLine(uint8_t* voxels,
-                           int x0, int y0, int z0,
-                           int x1, int y1, int z1,
-                           uint8_t r, uint8_t g, uint8_t b)
-{
-    int dx = std::abs(x1-x0);
-    int dy = std::abs(y1-y0);
-    int dz = std::abs(z1-z0);
-    int dominant = std::max({dx, dy, dz});
-
-    if (dominant == 0) {
-        paintVoxel(voxels, x0, y0, z0, r, g, b);
-        return;
-    }
-
-    for (int i = 0; i <= dominant; ++i) {
-        float t = (float)i / (float)dominant;
-        int x = (int)roundf(x0 + t * (x1 - x0));
-        int y = (int)roundf(y0 + t * (y1 - y0));
-        int z = (int)roundf(z0 + t * (z1 - z0));
-        paintVoxel(voxels, x, y, z, r, g, b);
-    }
-}
 
 // -----------------------------------------------------------------------
 // IApplication interface
@@ -167,7 +95,7 @@ void CubeApp::draw(Renderer& renderer)
     float transformed[8][3];
     for (int vi = 0; vi < 8; ++vi) {
         float rot[3];
-        rotate(kVerts[vi], rot);
+        voxpaint::rotateXYZ(rotX_, rotY_, rotZ_, kVerts[vi], rot);
 
         // Scale and map to voxel space:
         //   Model x ∈ [-1,1] * scale_ → voxel X ∈ [0, VOXEL_W-1]  (center at W/2)
@@ -182,7 +110,7 @@ void CubeApp::draw(Renderer& renderer)
     for (int ei = 0; ei < 12; ++ei) {
         int a = kEdges[ei][0];
         int b = kEdges[ei][1];
-        paint3DLine(voxels,
+        voxpaint::paint3DLine(voxels,
                     (int)roundf(transformed[a][0]),
                     (int)roundf(transformed[a][1]),
                     (int)roundf(transformed[a][2]),

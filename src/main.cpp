@@ -35,6 +35,11 @@ static std::string getHologramRoot()
 #include "application/PongApp.h"
 #include "application/WireframeApp.h"
 #include "application/FluidApp.h"
+#include "application/DNAHelixApp.h"
+#include "application/ParticleApp.h"
+#include "application/MenuApp.h"
+
+#include <string>
 
 // -----------------------------------------------------------------------
 // Globals for signal handling
@@ -104,11 +109,12 @@ static pid_t launchDocker()
 static void usage(const char* prog)
 {
     fprintf(stderr,
-        "Usage: %s --app <cube|hand|pong|wireframe|fluid> --ip <pi_ip> --port <port>\n"
-        "  --app       Application to run (default: cube)\n"
+        "Usage: %s --app <name> --ip <pi_ip> --port <port>\n"
+        "  --app       Application: cube, hand, pong, wireframe, fluid,\n"
+        "              dna, particles, menu  (default: cube)\n"
         "  --ip        Target IP address of Raspberry Pi (default: 10.42.0.169)\n"
         "  --port      Target UDP port (default: 4210)\n"
-        "  --obj       Path to .obj file (required for wireframe app)\n"
+        "  --obj       Path to .obj file (for wireframe app)\n"
         "  --no-docker Skip launching the Docker hand tracker sidecar\n",
         prog);
 }
@@ -181,20 +187,39 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // 3. Select application
-    IApplication* app = nullptr;
+    // 3. Instantiate all application singletons
     CubeApp      cubeApp;
     HandApp      handApp(network);
     PongApp      pongApp;
-    WireframeApp wireframeApp(objPath);
+    WireframeApp wireframeApp;
     FluidApp     fluidApp;
+    DNAHelixApp  dnaApp;
+    ParticleApp  particleApp;
+    MenuApp      menuApp;
 
-    if      (strcmp(appName, "cube")      == 0) app = &cubeApp;
-    else if (strcmp(appName, "hand")      == 0) app = &handApp;
-    else if (strcmp(appName, "pong")      == 0) app = &pongApp;
-    else if (strcmp(appName, "wireframe") == 0) app = &wireframeApp;
-    else if (strcmp(appName, "fluid")     == 0) app = &fluidApp;
-    else {
+    // If --obj was given on the CLI, pre-load the wireframe model.
+    if (objPath[0] != '\0') wireframeApp.setModel(objPath);
+
+    // Resolve a string app name (including "wireframe:<path>") to an
+    // IApplication pointer. Returns nullptr if unrecognised.
+    auto resolveApp = [&](const std::string& name) -> IApplication* {
+        if (name == "cube")         return &cubeApp;
+        if (name == "hand")         return &handApp;
+        if (name == "pong")         return &pongApp;
+        if (name == "fluid")        return &fluidApp;
+        if (name == "dna")          return &dnaApp;
+        if (name == "particles")    return &particleApp;
+        if (name == "menu")         return &menuApp;
+        if (name == "wireframe")    return &wireframeApp;
+        if (name.rfind("wireframe:", 0) == 0) {
+            wireframeApp.setModel(name.substr(10));
+            return &wireframeApp;
+        }
+        return nullptr;
+    };
+
+    IApplication* app = resolveApp(appName);
+    if (!app) {
         fprintf(stderr, "main: unknown app '%s'\n", appName);
         usage(argv[0]);
         return 1;
@@ -219,23 +244,47 @@ int main(int argc, char* argv[])
     fprintf(stderr, "main: entering main loop (app=%s)\n", appName);
 
     // ----------------------------------------------------------------
-    // Main loop
+    // Swap helper — invoked when requestedApp() returns non-null.
+    // Tears down the current app, resolves the target, calls setup, and
+    // re-evaluates bypassSlicer. Returns false if the request is
+    // unknown (stays on current app).
     // ----------------------------------------------------------------
-    if (bypassSlicer) {
-        // HandApp path: sends UDP directly inside draw(), no slicer involved
+    auto trySwapApp = [&]() -> bool {
+        const char* req = app->requestedApp();
+        if (!req) return false;
+
+        std::string name(req);
+        IApplication* next = resolveApp(name);
+        if (!next) {
+            fprintf(stderr, "main: swap to unknown '%s' ignored\n", req);
+            return false;
+        }
+
+        fprintf(stderr, "main: swapping → %s\n", name.c_str());
+        app->teardown(renderer);
+        app = next;
+        app->setup(renderer);
+        bool newBypass = app->bypassSlicer();
+        bool changed   = (newBypass != bypassSlicer);
+        bypassSlicer   = newBypass;
+        return changed;   // true if the caller must break and re-enter
+    };
+
+    // ----------------------------------------------------------------
+    // Main loop — outer `while` re-enters the correct path whenever the
+    // bypass flag changes due to an app swap.
+    // ----------------------------------------------------------------
+    while (g_running) {
+      if (bypassSlicer) {
+        // HandApp-style path: app sends UDP directly inside draw().
         while (g_running) {
             inputBridge.read(handData, 8);
             app->update(handData);
             app->draw(renderer);
+            if (trySwapApp()) break;  // bypass flag changed → re-enter
         }
-    } else {
-        // 3D app path: pipeline GPU compute with UDP sending so the GPU works
-        // on frame N+1 while the CPU is sending frame N's packets.
-        //
-        // Timeline per iteration:
-        //   syncReadback()          — waits for GPU (should already be done)
-        //   update+draw+kickDispatch — ~3ms CPU work, kicks GPU for next frame
-        //   sendSlice() x SLICE_COUNT — 24ms; GPU computes concurrently
+      } else {
+        // 3D app path: pipeline GPU compute with UDP sending.
         //
         // Prime: render frame 0 and kick GPU before entering loop
         inputBridge.read(handData, 8);
@@ -245,25 +294,29 @@ int main(int argc, char* argv[])
         slicer.kickDispatch(renderer.getVoxelTextureID());
 
         while (g_running) {
-            // Wait for GPU work kicked in the previous iteration
             slicer.syncReadback(*sliceBuffer);
 
-            // Prepare next frame and kick GPU immediately
             inputBridge.read(handData, 8);
             app->update(handData);
             renderer.clearVoxels();
             app->draw(renderer);
             slicer.kickDispatch(renderer.getVoxelTextureID());
 
-            // Send current frame's slices (GPU computes next frame concurrently)
             for (int i = 0; i < SLICE_COUNT; ++i) {
                 network.sendSlice((uint8_t)i, &sliceBuffer->data[i][0][0][0]);
-                usleep(100);   // 240 x 0.1ms = 24ms total send window
+                usleep(100);
+            }
+
+            if (trySwapApp()) {
+                // Drain the in-flight GPU work before switching loop paths.
+                slicer.syncReadback(*sliceBuffer);
+                break;
             }
         }
 
-        // Drain the in-flight GPU work kicked on the last iteration
-        slicer.syncReadback(*sliceBuffer);
+        // Drain if we're exiting (g_running==false) rather than swapping.
+        if (!g_running) slicer.syncReadback(*sliceBuffer);
+      }
     }
 
     // ----------------------------------------------------------------

@@ -1,4 +1,5 @@
 #include "WireframeApp.h"
+#include "VoxelPaint.h"
 #include "../engine/Renderer.h"
 #include <cmath>
 #include <cstring>
@@ -27,28 +28,45 @@ static constexpr float SPIN_FRICTION = 0.995f;
 static constexpr float DEFAULT_SPIN_Y = 0.02f;
 
 // -----------------------------------------------------------------------
-// Construction
+// Model loading
 // -----------------------------------------------------------------------
-WireframeApp::WireframeApp(const std::string& objPath)
-    : objPath_(objPath)
-{}
-
-// -----------------------------------------------------------------------
-// Setup: load OBJ and compute bounding box
-// -----------------------------------------------------------------------
-void WireframeApp::setup(Renderer& /*renderer*/)
+bool WireframeApp::setModel(const std::string& objPath)
 {
+    objPath_ = objPath;
+    mesh_.vertices.clear();
+    mesh_.edges.clear();
+
     if (objPath_.empty()) {
-        fprintf(stderr, "WireframeApp: no OBJ path provided\n");
-        return;
+        fprintf(stderr, "WireframeApp: empty OBJ path\n");
+        return false;
     }
 
     if (!loadObj(objPath_, mesh_)) {
-        fprintf(stderr, "WireframeApp: failed to load mesh\n");
-        return;
+        fprintf(stderr, "WireframeApp: failed to load mesh '%s'\n",
+                objPath_.c_str());
+        return false;
     }
 
     computeBBox();
+    return true;
+}
+
+// -----------------------------------------------------------------------
+// Setup: if a model path was set prior to setup, load it now.
+// -----------------------------------------------------------------------
+void WireframeApp::setup(Renderer& /*renderer*/)
+{
+    // If setModel() was called before setup() and the mesh is not yet
+    // loaded, load it. (setModel() loads eagerly, so this is typically
+    // a no-op.)
+    if (!objPath_.empty() && mesh_.vertices.empty()) {
+        if (!loadObj(objPath_, mesh_)) {
+            fprintf(stderr, "WireframeApp: failed to load mesh '%s'\n",
+                    objPath_.c_str());
+            return;
+        }
+        computeBBox();
+    }
 }
 
 void WireframeApp::computeBBox()
@@ -181,71 +199,6 @@ void WireframeApp::update(const SharedHandData& hand)
 }
 
 // -----------------------------------------------------------------------
-// Rotation matrix (same as CubeApp)
-// -----------------------------------------------------------------------
-void WireframeApp::rotate(const float v[3], float out[3]) const
-{
-    float cx = cosf(rotX_), sx = sinf(rotX_);
-    float cy = cosf(rotY_), sy = sinf(rotY_);
-    float cz = cosf(rotZ_), sz = sinf(rotZ_);
-
-    float R[3][3];
-    R[0][0] =  cy*cz;
-    R[0][1] =  cz*sx*sy - cx*sz;
-    R[0][2] =  cx*cz*sy + sx*sz;
-    R[1][0] =  cy*sz;
-    R[1][1] =  cx*cz + sx*sy*sz;
-    R[1][2] =  cx*sy*sz - cz*sx;
-    R[2][0] = -sy;
-    R[2][1] =  cy*sx;
-    R[2][2] =  cx*cy;
-
-    out[0] = v[0]*R[0][0] + v[1]*R[1][0] + v[2]*R[2][0];
-    out[1] = v[0]*R[0][1] + v[1]*R[1][1] + v[2]*R[2][1];
-    out[2] = v[0]*R[0][2] + v[1]*R[1][2] + v[2]*R[2][2];
-}
-
-// -----------------------------------------------------------------------
-// Voxel painting (identical to CubeApp)
-// -----------------------------------------------------------------------
-void WireframeApp::paintVoxel(uint8_t* voxels, int x, int y, int z,
-                               uint8_t r, uint8_t g, uint8_t b)
-{
-    if (x < 0 || x >= VOXEL_W) return;
-    if (y < 0 || y >= VOXEL_H) return;
-    if (z < 0 || z >= VOXEL_D) return;
-    int idx = ((z * VOXEL_H + y) * VOXEL_W + x) * 4;
-    voxels[idx + 0] = r;
-    voxels[idx + 1] = g;
-    voxels[idx + 2] = b;
-    voxels[idx + 3] = 255;
-}
-
-void WireframeApp::paint3DLine(uint8_t* voxels,
-                                int x0, int y0, int z0,
-                                int x1, int y1, int z1,
-                                uint8_t r, uint8_t g, uint8_t b)
-{
-    int dx = std::abs(x1 - x0);
-    int dy = std::abs(y1 - y0);
-    int dz = std::abs(z1 - z0);
-    int dominant = std::max({dx, dy, dz});
-
-    if (dominant == 0) {
-        paintVoxel(voxels, x0, y0, z0, r, g, b);
-        return;
-    }
-
-    for (int i = 0; i <= dominant; ++i) {
-        float t = (float)i / (float)dominant;
-        int x = (int)roundf(x0 + t * (x1 - x0));
-        int y = (int)roundf(y0 + t * (y1 - y0));
-        int z = (int)roundf(z0 + t * (z1 - z0));
-        paintVoxel(voxels, x, y, z, r, g, b);
-    }
-}
-
-// -----------------------------------------------------------------------
 // Draw: transform mesh and paint into voxel buffer
 // -----------------------------------------------------------------------
 void WireframeApp::draw(Renderer& renderer)
@@ -270,7 +223,7 @@ void WireframeApp::draw(Renderer& renderer)
 
         // Rotate
         float rot[3];
-        rotate(v, rot);
+        voxpaint::rotateXYZ(rotX_, rotY_, rotZ_, v, rot);
 
         // Scale and map to voxel space
         tx[i] = (rot[0] * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1);
@@ -283,7 +236,7 @@ void WireframeApp::draw(Renderer& renderer)
         int a = edge[0], b = edge[1];
         if (a < 0 || a >= numVerts || b < 0 || b >= numVerts) continue;
 
-        paint3DLine(voxels,
+        voxpaint::paint3DLine(voxels,
                     (int)roundf(tx[a]), (int)roundf(ty[a]), (int)roundf(tz[a]),
                     (int)roundf(tx[b]), (int)roundf(ty[b]), (int)roundf(tz[b]),
                     R, G, B);

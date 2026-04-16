@@ -16,11 +16,13 @@ find_package(Threads REQUIRED)
 # --- Compiler flags ---
 add_compile_options(
     -O2
-    -march=armv8-a
-    -mtune=cortex-a78
     -Wall
     -Wextra
 )
+# ARM-specific tuning — only applied when cross-compiling for Jetson (aarch64).
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm")
+    add_compile_options(-march=armv8-a -mtune=cortex-a78)
+endif()
 
 # --- Source files ---
 set(ENGINE_SOURCES
@@ -29,12 +31,17 @@ set(ENGINE_SOURCES
     src/engine/Network.cpp
     src/engine/InputBridge.cpp
     src/engine/ObjLoader.cpp
+    src/engine/JsonConfig.cpp
+    src/engine/CameraConfig.cpp
 )
 
 set(APP_SOURCES
     src/application/CubeApp.cpp
     src/application/HandApp.cpp
     src/application/WireframeApp.cpp
+    src/application/DNAHelixApp.cpp
+    src/application/ParticleApp.cpp
+    src/application/MenuApp.cpp
 )
 
 add_executable(hologram
