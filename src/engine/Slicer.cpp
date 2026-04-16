@@ -91,9 +91,10 @@ bool Slicer::init(const char* shaderPath)
 }
 
 // -----------------------------------------------------------------------
-// Dispatch compute for all 120 angles in one call, readback entire array
+// Phase 1: dispatch compute for all angles and initiate DMA to PBO.
+// Returns immediately without waiting for GPU completion.
 // -----------------------------------------------------------------------
-void Slicer::sliceAll(GLuint voxelTexID, SliceBuffer& buf)
+void Slicer::kickDispatch(GLuint voxelTexID)
 {
     glUseProgram(computeProg_);
 
@@ -107,24 +108,34 @@ void Slicer::sliceAll(GLuint voxelTexID, SliceBuffer& buf)
     // Single dispatch covering all 128×64×SLICE_COUNT invocations
     glDispatchCompute(2, 16, SLICE_COUNT);
 
-    // Barrier: ensure image writes are visible for texture read
+    // Barrier: ensure image writes are visible for the upcoming texture read
     glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT
                   | GL_TEXTURE_UPDATE_BARRIER_BIT);
 
-    // Single readback of the entire array via PBO
+    // Kick off async DMA from GPU texture into PBO — does not block
     glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
     glGetTextureImage(sliceOutTex_, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                       SLICE_W * SLICE_H * SLICE_COUNT * 4, 0);
-    glFinish();
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
 
+    glUseProgram(0);
+}
+
+// -----------------------------------------------------------------------
+// Phase 2: wait for GPU/DMA to complete and copy results into buf.
+// Must be called after a prior kickDispatch().
+// -----------------------------------------------------------------------
+void Slicer::syncReadback(SliceBuffer& buf)
+{
+    glFinish();  // wait for compute + DMA to complete
+
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
     void* ptr = glMapBuffer(GL_PIXEL_PACK_BUFFER, GL_READ_ONLY);
     if (ptr) {
         memcpy(buf.data, ptr, SLICE_W * SLICE_H * SLICE_COUNT * 4);
         glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
     }
     glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
-
-    glUseProgram(0);
 }
 
 void Slicer::shutdown()
