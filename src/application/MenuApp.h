@@ -38,7 +38,7 @@ private:
         std::string id;        // "cube", "torus", "particles", "wireframe"
         std::string label;     // human-readable (currently unused — iconography only)
         std::string obj;       // only for "wireframe" entries
-        int iconKind = 0;      // 0=cube, 1=helix, 2=dots, 3=tetra
+        int iconKind = 0;      // 0=cube, 1=torus knot, 2=dots, 3=tetra
     };
 
     std::vector<Entry> entries_;

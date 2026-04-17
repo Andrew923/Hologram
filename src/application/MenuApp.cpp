@@ -40,7 +40,6 @@ int MenuApp::iconKindForId(const std::string& id) const
 {
     if (id == "cube")      return 0;
     if (id == "torus")     return 1;
-    if (id == "dna")       return 1; // backward-compat config alias
     if (id == "particles") return 2;
     if (id == "wireframe") return 3;
     return 0;
@@ -144,7 +143,7 @@ void MenuApp::update(const SharedHandData& hand)
 
     Gesture g = detectGesture(hand);
 
-    // PEACE direction → angular velocity (same formula as DNA).
+    // PEACE direction → angular velocity.
     if (g == Gesture::PEACE) {
         float dirX = hand.lm_x[8] - hand.lm_x[5];
         dirX = clampf(dirX, -0.5f, 0.5f);
@@ -180,14 +179,14 @@ void MenuApp::update(const SharedHandData& hand)
 }
 
 // Draw a tiny icon (model-space half-extent s) centered at (cx,cy,cz).
-// kind: 0=cube wireframe, 1=helix, 2=dots cloud, 3=tetrahedron.
+// kind: 0=cube wireframe, 1=torus knot, 2=dots cloud, 3=tetrahedron.
 void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
                        float s, bool highlighted) const
 {
     // Color tables
     static const uint8_t icon_colors[4][3] = {
         {  0, 255, 255},  // cube: cyan
-        {255,  60, 200},  // helix: magenta-ish
+        {255,  60, 200},  // torus knot: magenta-ish
         {255, 180,  40},  // dots: amber
         { 80, 255, 120},  // tetra: mint
     };
@@ -218,26 +217,26 @@ void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
                                          px[e[i][1]], py[e[i][1]], pz[e[i][1]],
                                          rgb[0], rgb[1], rgb[2]);
     } else if (kind == 1) {
-        // Mini helix
-        const int N = 24;
-        int prevAx, prevAy, prevAz, prevBx, prevBy, prevBz;
-        for (int i = 0; i < N; ++i) {
-            float t = (float)i / (N - 1);
-            float y = (t - 0.5f) * 2.0f;
-            float th = 2.0f * (float)M_PI * 2.0f * t;
-            float ax = cosf(th), az = sinf(th);
-            float bx = cosf(th + (float)M_PI), bz = sinf(th + (float)M_PI);
-            int avx, avy, avz, bvx, bvy, bvz;
-            mapToVoxel(ax, y, az, avx, avy, avz);
-            mapToVoxel(bx, y, bz, bvx, bvy, bvz);
-            if (i > 0) {
-                voxpaint::paint3DLine(voxels, prevAx, prevAy, prevAz, avx, avy, avz,
-                                      rgb[0], rgb[1], rgb[2]);
-                voxpaint::paint3DLine(voxels, prevBx, prevBy, prevBz, bvx, bvy, bvz,
+        // Mini torus knot
+        const int N = 36;
+        const int P = 2, Q = 3;
+        const float R = 0.68f, r = 0.28f;
+        int prevX = 0, prevY = 0, prevZ = 0;
+        bool havePrev = false;
+        for (int i = 0; i <= N; ++i) {
+            float t = (float)i / (float)N * 2.0f * (float)M_PI;
+            float ring = R + r * cosf((float)Q * t);
+            float x = ring * cosf((float)P * t);
+            float y = 0.9f * r * sinf((float)Q * t);
+            float z = ring * sinf((float)P * t);
+            int vx, vy, vz;
+            mapToVoxel(x, y, z, vx, vy, vz);
+            if (havePrev) {
+                voxpaint::paint3DLine(voxels, prevX, prevY, prevZ, vx, vy, vz,
                                       rgb[0], rgb[1], rgb[2]);
             }
-            prevAx = avx; prevAy = avy; prevAz = avz;
-            prevBx = bvx; prevBy = bvy; prevBz = bvz;
+            prevX = vx; prevY = vy; prevZ = vz;
+            havePrev = true;
         }
     } else if (kind == 2) {
         // Cluster of dots

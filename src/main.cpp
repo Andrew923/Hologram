@@ -238,7 +238,6 @@ int main(int argc, char* argv[])
         if (name == "pong")         return &pongApp;
         if (name == "fluid")        return &fluidApp;
         if (name == "torus")        return &torusApp;
-        if (name == "dna")          return &torusApp; // backward-compat alias
         if (name == "particles")    return &particleApp;
         if (name == "menu")         return &menuApp;
         if (name == "wireframe")    return &wireframeApp;
