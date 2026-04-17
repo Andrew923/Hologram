@@ -11,7 +11,7 @@ public:
     bool init(const char* targetIP, uint16_t targetPort);
 
     // Send one slice (column-major RGB888 RLE):
-    //   [byte 0]: slice_id (0-119)
+    //   [byte 0]: slice_id (0-239)
     //   [byte 1]: flags = 0x00 (RLE-RGB888)
     //   [RLE payload]: [count][R][G][B] ...
     // rgba_128x64 points to SLICE_H*SLICE_W*4 bytes, row-major RGBA8
