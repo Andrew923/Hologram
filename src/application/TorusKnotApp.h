@@ -23,4 +23,3 @@ private:
 
     ReturnToMenuWatcher menuWatcher_;
 };
-

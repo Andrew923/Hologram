@@ -106,6 +106,9 @@ void TorusKnotApp::draw(Renderer& renderer)
         int vx = (int)roundf((xr * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1));
         int vy = (int)roundf((y  * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1));
         int vz = (int)roundf((zr * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1) + Z_BIAS_PX);
+        vx = std::max(0, std::min(VOXEL_W - 1, vx));
+        vy = std::max(0, std::min(VOXEL_H - 1, vy));
+        vz = std::max(0, std::min(VOXEL_D - 1, vz));
 
         if (havePrev) {
             const uint8_t* c = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
