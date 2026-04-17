@@ -48,7 +48,7 @@ void CubeApp::setup(Renderer& /*renderer*/) {}
 
 void CubeApp::update(const SharedHandData& hand)
 {
-    auto applyCoreBias = [&]() {
+    auto smoothCoreBias = [&]() {
         float halfExtentZ = scale_ * 0.5f * (VOXEL_D - 1);
         float tgtPosZ = CORE_SAFE_RADIUS_PX + halfExtentZ;
         float maxPosZ = 0.5f * (VOXEL_D - 1) - halfExtentZ - 1.0f;
@@ -59,7 +59,7 @@ void CubeApp::update(const SharedHandData& hand)
     if (!hand.hand_detected) {
         posX_ *= 0.98f;   // slow exponential drift back to center (~3s at 60fps)
         posY_ *= 0.98f;
-        applyCoreBias();
+        smoothCoreBias();
         return;
     }
 
@@ -90,7 +90,7 @@ void CubeApp::update(const SharedHandData& hand)
     scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
     posX_  += (tgtPosX  - posX_)  * SMOOTHING_FACTOR;
     posY_  += (tgtPosY  - posY_)  * SMOOTHING_FACTOR;
-    applyCoreBias();
+    smoothCoreBias();
 }
 
 void CubeApp::draw(Renderer& renderer)
