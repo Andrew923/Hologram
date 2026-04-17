@@ -50,7 +50,7 @@ void CubeApp::update(const SharedHandData& hand)
 {
     auto updatePosZForCore = [&]() {
         float halfExtentZ = scale_ * 0.5f * (VOXEL_D - 1);
-        float tgtPosZ = CORE_RADIUS_PX + CORE_MARGIN_PX + halfExtentZ;
+        float tgtPosZ = CORE_SAFE_RADIUS_PX + halfExtentZ;
         float maxPosZ = 0.5f * (VOXEL_D - 1) - halfExtentZ - 1.0f;
         tgtPosZ = clampf(tgtPosZ, 0.0f, std::max(0.0f, maxPosZ));
         posZ_ += (tgtPosZ - posZ_) * SMOOTHING_FACTOR;

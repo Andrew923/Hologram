@@ -22,7 +22,7 @@ static constexpr float TORUS_MINOR = 0.22f;
 static constexpr float HEIGHT_GAIN = 0.95f;
 
 // Keep the knot displaced from the axis dead-core with extra margin for thickness.
-static constexpr float Z_BIAS_VOXELS = CORE_SAFE_RADIUS_PX + 12.0f;
+static constexpr float Z_BIAS_PX = CORE_SAFE_RADIUS_PX + 12.0f;
 
 static constexpr float SCALE_MIN_PX = 10.0f;
 static constexpr float SCALE_MAX_PX = 26.0f;
@@ -105,7 +105,7 @@ void TorusKnotApp::draw(Renderer& renderer)
 
         int vx = (int)roundf((xr * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1));
         int vy = (int)roundf((y  * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1));
-        int vz = (int)roundf((zr * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1) + Z_BIAS_VOXELS);
+        int vz = (int)roundf((zr * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1) + Z_BIAS_PX);
 
         if (havePrev) {
             const uint8_t* c = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
