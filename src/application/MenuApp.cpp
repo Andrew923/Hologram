@@ -39,7 +39,8 @@ static inline float wrapAngle(float a) {
 int MenuApp::iconKindForId(const std::string& id) const
 {
     if (id == "cube")      return 0;
-    if (id == "dna")       return 1;
+    if (id == "torus")     return 1;
+    if (id == "dna")       return 1; // backward-compat config alias
     if (id == "particles") return 2;
     if (id == "wireframe") return 3;
     return 0;
@@ -72,7 +73,7 @@ void MenuApp::loadEntries(const std::string& path)
     // Fallback defaults if no entries were loaded.
     if (entries_.empty()) {
         entries_.push_back({"cube",      "Cube",      "",  0});
-        entries_.push_back({"dna",       "DNA",       "",  1});
+        entries_.push_back({"torus",     "Torus",     "",  1});
         entries_.push_back({"particles", "Particles", "",  2});
     }
 

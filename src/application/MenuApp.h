@@ -8,7 +8,7 @@
 // MenuApp — 3D carousel of application icons.
 //
 // Membership is loaded from config/menu.json at setup() time; if the
-// file is absent, a default list (cube, dna, particles) is used.
+// file is absent, a default list (cube, torus, particles) is used.
 //
 // Interaction:
 //   PEACE (index+middle extended, horizontal direction) → spin carousel.
@@ -35,7 +35,7 @@ public:
 
 private:
     struct Entry {
-        std::string id;        // "cube", "dna", "particles", "wireframe"
+        std::string id;        // "cube", "torus", "particles", "wireframe"
         std::string label;     // human-readable (currently unused — iconography only)
         std::string obj;       // only for "wireframe" entries
         int iconKind = 0;      // 0=cube, 1=helix, 2=dots, 3=tetra

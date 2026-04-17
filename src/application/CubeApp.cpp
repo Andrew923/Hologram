@@ -35,6 +35,8 @@ static inline float clampf(float x, float lo, float hi) {
 static constexpr float SCALE_MIN_PX     = 8.0f;   // minimum cube height in pixels
 static constexpr float SCALE_MAX_PX     = 24.0f;  // maximum cube height in pixels
 static constexpr float SMOOTHING_FACTOR = 0.1f;   // exponential smoothing for rot/scale/pos (0=frozen, 1=instant)
+static constexpr float CORE_RADIUS_PX   = 12.0f;  // unswept radius from panel geometry
+static constexpr float CORE_MARGIN_PX   = 2.0f;   // keep some visual margin from core
 
 // Derived scale limits (cube height = scale * (VOXEL_H - 1) pixels)
 static constexpr float SCALE_MIN = SCALE_MIN_PX / (VOXEL_H - 1);
@@ -47,9 +49,18 @@ void CubeApp::setup(Renderer& /*renderer*/) {}
 
 void CubeApp::update(const SharedHandData& hand)
 {
+    auto updatePosZForCore = [&]() {
+        float halfExtentZ = scale_ * 0.5f * (VOXEL_D - 1);
+        float tgtPosZ = CORE_RADIUS_PX + CORE_MARGIN_PX + halfExtentZ;
+        float maxPosZ = 0.5f * (VOXEL_D - 1) - halfExtentZ - 1.0f;
+        tgtPosZ = clampf(tgtPosZ, 0.0f, std::max(0.0f, maxPosZ));
+        posZ_ += (tgtPosZ - posZ_) * SMOOTHING_FACTOR;
+    };
+
     if (!hand.hand_detected) {
         posX_ *= 0.98f;   // slow exponential drift back to center (~3s at 60fps)
         posY_ *= 0.98f;
+        updatePosZForCore();
         return;
     }
 
@@ -80,6 +91,7 @@ void CubeApp::update(const SharedHandData& hand)
     scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
     posX_  += (tgtPosX  - posX_)  * SMOOTHING_FACTOR;
     posY_  += (tgtPosY  - posY_)  * SMOOTHING_FACTOR;
+    updatePosZForCore();
 }
 
 void CubeApp::draw(Renderer& renderer)
@@ -103,7 +115,7 @@ void CubeApp::draw(Renderer& renderer)
         //   Model z ∈ [-1,1] * scale_ → voxel Z ∈ [0, VOXEL_D-1]  (center at D/2)
         transformed[vi][0] = (rot[0] * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1) + posX_;
         transformed[vi][1] = (rot[1] * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1) + posY_;
-        transformed[vi][2] = (rot[2] * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1);
+        transformed[vi][2] = (rot[2] * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1) + posZ_;
     }
 
     // Paint all 12 edges using 3D DDA

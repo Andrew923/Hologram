@@ -27,6 +27,9 @@ static constexpr float NEIGHBOR_STRENGTH = 0.35f;
 static constexpr float X_MIN = 16.0f, X_MAX = 112.0f;
 static constexpr float Y_MIN =  8.0f, Y_MAX =  56.0f;
 static constexpr float Z_MIN = 16.0f, Z_MAX = 112.0f;
+static constexpr float CORE_RADIUS = 12.0f;
+static constexpr float CORE_MARGIN = 2.0f;
+static constexpr float CORE_SAFE_RADIUS = CORE_RADIUS + CORE_MARGIN;
 
 // Z depth mapping when using hand-size fallback (no camera.json).
 static constexpr float FALLBACK_BONE_PX_NEAR = 0.22f;  // normalized dist at "near"
@@ -38,6 +41,34 @@ static inline float clampf(float x, float lo, float hi) {
 
 static inline float frandRange(float lo, float hi) {
     return lo + (hi - lo) * ((float)rand() / (float)RAND_MAX);
+}
+
+static inline void enforceCoreRadius(float& x, float& z, float* vx = nullptr, float* vz = nullptr)
+{
+    float dx = x - 0.5f * (VOXEL_W - 1);
+    float dz = z - 0.5f * (VOXEL_D - 1);
+    float r2 = dx * dx + dz * dz;
+    float minR2 = CORE_SAFE_RADIUS * CORE_SAFE_RADIUS;
+    if (r2 >= minR2) return;
+
+    float r = sqrtf(r2);
+    float ux = 1.0f, uz = 0.0f;
+    if (r > 1e-5f) {
+        ux = dx / r;
+        uz = dz / r;
+    }
+
+    x = 0.5f * (VOXEL_W - 1) + ux * CORE_SAFE_RADIUS;
+    z = 0.5f * (VOXEL_D - 1) + uz * CORE_SAFE_RADIUS;
+
+    if (vx && vz) {
+        float vn = (*vx) * ux + (*vz) * uz;
+        if (vn < 0.0f) {
+            // remove inward radial velocity, keep tangential motion
+            *vx -= vn * ux;
+            *vz -= vn * uz;
+        }
+    }
 }
 
 void ParticleApp::resetParticles()
@@ -56,6 +87,7 @@ void ParticleApp::resetParticles()
         particles_[i].x  = frandRange(X_MIN + 8.0f, X_MAX - 8.0f);
         particles_[i].y  = frandRange(Y_MIN + 4.0f, Y_MAX - 4.0f);
         particles_[i].z  = frandRange(Z_MIN + 8.0f, Z_MAX - 8.0f);
+        enforceCoreRadius(particles_[i].x, particles_[i].z);
         particles_[i].vx = frandRange(-0.3f, 0.3f);
         particles_[i].vy = frandRange(-0.2f, 0.2f);
         particles_[i].vz = frandRange(-0.3f, 0.3f);
@@ -128,6 +160,7 @@ void ParticleApp::computeCursor(const SharedHandData& hand)
     curX_ = clampf(hand.lm_x[8] * (float)VOXEL_W, X_MIN, X_MAX);
     curY_ = clampf(hand.lm_y[8] * (float)VOXEL_H, Y_MIN, Y_MAX);
     curZ_ = clampf(smoothedZ_, Z_MIN, Z_MAX);
+    enforceCoreRadius(curX_, curZ_);
     cursorValid_ = true;
 }
 
@@ -156,6 +189,7 @@ void ParticleApp::update(const SharedHandData& hand)
         particles_[i].vx = frandRange(-0.5f, 0.5f);
         particles_[i].vy = frandRange(-0.5f, 0.5f);
         particles_[i].vz = frandRange(-0.5f, 0.5f);
+        enforceCoreRadius(particles_[i].x, particles_[i].z);
         spawnCooldown_ = 10;
     }
 
@@ -212,6 +246,7 @@ void ParticleApp::update(const SharedHandData& hand)
         p.x += p.vx;
         p.y += p.vy;
         p.z += p.vz;
+        enforceCoreRadius(p.x, p.z, &p.vx, &p.vz);
     }
 }
 

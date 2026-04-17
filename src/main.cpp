@@ -43,7 +43,7 @@ static std::string getHologramRoot()
 #include "application/PongApp.h"
 #include "application/WireframeApp.h"
 #include "application/FluidApp.h"
-#include "application/DNAHelixApp.h"
+#include "application/TorusKnotApp.h"
 #include "application/ParticleApp.h"
 #include "application/MenuApp.h"
 
@@ -119,7 +119,7 @@ static void usage(const char* prog)
     fprintf(stderr,
         "Usage: %s --app <name> --ip <pi_ip> --port <port>\n"
         "  --app         Application: cube, hand, pong, wireframe, fluid,\n"
-        "                dna, particles, menu  (default: cube)\n"
+        "                torus, particles, menu  (default: cube)\n"
         "  --ip          Target IP address of Raspberry Pi (default: 10.42.0.169)\n"
         "  --port        Target UDP port (default: 4210)\n"
         "  --obj         Path to .obj file (for wireframe app)\n"
@@ -223,7 +223,7 @@ int main(int argc, char* argv[])
     PongApp      pongApp;
     WireframeApp wireframeApp;
     FluidApp     fluidApp;
-    DNAHelixApp  dnaApp;
+    TorusKnotApp torusApp;
     ParticleApp  particleApp;
     MenuApp      menuApp;
 
@@ -237,7 +237,8 @@ int main(int argc, char* argv[])
         if (name == "hand")         return &handApp;
         if (name == "pong")         return &pongApp;
         if (name == "fluid")        return &fluidApp;
-        if (name == "dna")          return &dnaApp;
+        if (name == "torus")        return &torusApp;
+        if (name == "dna")          return &torusApp; // backward-compat alias
         if (name == "particles")    return &particleApp;
         if (name == "menu")         return &menuApp;
         if (name == "wireframe")    return &wireframeApp;
