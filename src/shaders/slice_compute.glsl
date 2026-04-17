@@ -24,23 +24,10 @@ void main()
     float cosT  = cos(theta);
     float sinT  = sin(theta);
 
-    // coord.x ∈ [64,127] → Panel A: chord at +PANEL_OFFSET from spin axis.
-    //   t = 0 at the innermost pixel (d = PANEL_OFFSET from centre),
-    //   t = 63 at the outermost pixel (d ≈ 64 px from centre).
-    // coord.x ∈ [0,63]   → Panel B: chord at −PANEL_OFFSET, mirrored.
-    //   t = 0 at innermost (coord.x = 63), t = 63 at outermost (coord.x = 0).
-    float vox_x, vox_z;
-    if (coord.x >= 64) {
-        float t = float(coord.x - 64);
-        vox_x = (64.0 + PANEL_OFFSET * cosT - t * sinT) / 128.0;
-        vox_z = (64.0 + PANEL_OFFSET * sinT + t * cosT) / 128.0;
-    } else {
-        float t = float(63 - coord.x);
-        vox_x = (64.0 - PANEL_OFFSET * cosT + t * sinT) / 128.0;
-        vox_z = (64.0 - PANEL_OFFSET * sinT - t * cosT) / 128.0;
-    }
-
+    float t     = float(coord.x) - 64.0;   // -64..+63
+    float vox_x = (64.0 + PANEL_OFFSET * cosT - t * sinT) / 128.0;
     float vox_y = float(coord.y) / 64.0;
+    float vox_z = (64.0 + PANEL_OFFSET * sinT + t * cosT) / 128.0;
 
     vec4 color = texture(uVoxelGrid, vec3(vox_x, vox_y, vox_z));
     imageStore(uSliceOut, ivec3(coord, sliceIndex), color);
