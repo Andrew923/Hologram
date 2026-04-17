@@ -21,6 +21,6 @@ private:
     float scale_  = 1.0f;   // clamped to ~16–32 px tall
     float posX_   = 0.0f;   // voxel-space X offset, clamped to ±8
     float posY_   = 0.0f;   // voxel-space Y offset, clamped to ±8
-    float posZ_   = 36.0f;  // keep cube away from unswept core near axis
+    float posZ_   = 0.0f;   // smoothed toward core-safe target in update()
 
 };

@@ -22,7 +22,8 @@ static constexpr float TORUS_MINOR = 0.22f;
 static constexpr float HEIGHT_GAIN = 0.95f;
 
 // Keep the knot displaced from the axis dead-core with extra margin for thickness.
-static constexpr float Z_BIAS_PX = CORE_SAFE_RADIUS_PX + 12.0f;
+static constexpr float KNOT_EXTRA_Z_MARGIN_PX = 12.0f;
+static constexpr float Z_BIAS_PX = CORE_SAFE_RADIUS_PX + KNOT_EXTRA_Z_MARGIN_PX;
 
 static constexpr float SCALE_MIN_PX = 10.0f;
 static constexpr float SCALE_MAX_PX = 26.0f;
