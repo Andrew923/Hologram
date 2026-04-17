@@ -1,5 +1,6 @@
 #include "TorusKnotApp.h"
 #include "VoxelPaint.h"
+#include "DisplayConstraints.h"
 #include "GestureDetector.h"
 #include "../engine/Renderer.h"
 #include <cmath>
@@ -20,8 +21,8 @@ static constexpr float TORUS_MAJOR = 0.62f;
 static constexpr float TORUS_MINOR = 0.22f;
 static constexpr float HEIGHT_GAIN = 0.95f;
 
-// Keep the knot displaced from the axis dead-core.
-static constexpr float Z_BIAS_VOXELS = 26.0f;
+// Keep the knot displaced from the axis dead-core with extra margin for thickness.
+static constexpr float Z_BIAS_VOXELS = CORE_SAFE_RADIUS_PX + 12.0f;
 
 static constexpr float SCALE_MIN_PX = 10.0f;
 static constexpr float SCALE_MAX_PX = 26.0f;
@@ -118,4 +119,3 @@ void TorusKnotApp::draw(Renderer& renderer)
 
     renderer.uploadVoxelBuffer(voxels);
 }
-

@@ -1,5 +1,6 @@
 #include "ParticleApp.h"
 #include "VoxelPaint.h"
+#include "DisplayConstraints.h"
 #include "GestureDetector.h"
 #include "../engine/Renderer.h"
 #include <cmath>
@@ -27,9 +28,6 @@ static constexpr float NEIGHBOR_STRENGTH = 0.35f;
 static constexpr float X_MIN = 16.0f, X_MAX = 112.0f;
 static constexpr float Y_MIN =  8.0f, Y_MAX =  56.0f;
 static constexpr float Z_MIN = 16.0f, Z_MAX = 112.0f;
-static constexpr float CORE_RADIUS = 12.0f;
-static constexpr float CORE_MARGIN = 2.0f;
-static constexpr float CORE_SAFE_RADIUS = CORE_RADIUS + CORE_MARGIN;
 
 // Z depth mapping when using hand-size fallback (no camera.json).
 static constexpr float FALLBACK_BONE_PX_NEAR = 0.22f;  // normalized dist at "near"
@@ -48,7 +46,7 @@ static inline void enforceCoreRadius(float& x, float& z, float* vx = nullptr, fl
     float dx = x - 0.5f * (VOXEL_W - 1);
     float dz = z - 0.5f * (VOXEL_D - 1);
     float r2 = dx * dx + dz * dz;
-    float minR2 = CORE_SAFE_RADIUS * CORE_SAFE_RADIUS;
+    float minR2 = CORE_SAFE_RADIUS_PX * CORE_SAFE_RADIUS_PX;
     if (r2 >= minR2) return;
 
     float r = sqrtf(r2);
@@ -58,8 +56,8 @@ static inline void enforceCoreRadius(float& x, float& z, float* vx = nullptr, fl
         uz = dz / r;
     }
 
-    x = 0.5f * (VOXEL_W - 1) + ux * CORE_SAFE_RADIUS;
-    z = 0.5f * (VOXEL_D - 1) + uz * CORE_SAFE_RADIUS;
+    x = 0.5f * (VOXEL_W - 1) + ux * CORE_SAFE_RADIUS_PX;
+    z = 0.5f * (VOXEL_D - 1) + uz * CORE_SAFE_RADIUS_PX;
 
     if (vx && vz) {
         float vn = (*vx) * ux + (*vz) * uz;
