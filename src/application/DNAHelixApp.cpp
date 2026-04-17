@@ -13,8 +13,8 @@
 // -----------------------------------------------------------------------
 // Tunables
 // -----------------------------------------------------------------------
-static constexpr int   N_STEPS    = 64;     // samples along the helix
-static constexpr int   BASE_STEP  = 6;      // rung every N-th sample
+static constexpr int   N_STEPS    = 256;     // samples along the helix
+static constexpr int   BASE_STEP  = 16;      // rung every N-th sample
 static constexpr float HELIX_TURNS   = 2.5f;
 static constexpr float HELIX_RADIUS  = 0.55f;
 static constexpr float HELIX_HEIGHT  = 1.6f;
