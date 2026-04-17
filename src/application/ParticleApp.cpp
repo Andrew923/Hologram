@@ -1,5 +1,6 @@
 #include "ParticleApp.h"
 #include "VoxelPaint.h"
+#include "DisplayConstraints.h"
 #include "GestureDetector.h"
 #include "../engine/Renderer.h"
 #include <cmath>
@@ -40,6 +41,34 @@ static inline float frandRange(float lo, float hi) {
     return lo + (hi - lo) * ((float)rand() / (float)RAND_MAX);
 }
 
+static inline void pushOutsideCoreRadius(float& x, float& z, float* vx = nullptr, float* vz = nullptr)
+{
+    float dx = x - 0.5f * (VOXEL_W - 1);
+    float dz = z - 0.5f * (VOXEL_D - 1);
+    float r2 = dx * dx + dz * dz;
+    float minR2 = CORE_SAFE_RADIUS_PX * CORE_SAFE_RADIUS_PX;
+    if (r2 >= minR2) return;
+
+    float r = sqrtf(r2);
+    float ux = 1.0f, uz = 0.0f;
+    if (r > 1e-5f) {
+        ux = dx / r;
+        uz = dz / r;
+    }
+
+    x = 0.5f * (VOXEL_W - 1) + ux * CORE_SAFE_RADIUS_PX;
+    z = 0.5f * (VOXEL_D - 1) + uz * CORE_SAFE_RADIUS_PX;
+
+    if (vx && vz) {
+        float vn = (*vx) * ux + (*vz) * uz;
+        if (vn < 0.0f) {
+            // remove inward radial velocity, keep tangential motion
+            *vx -= vn * ux;
+            *vz -= vn * uz;
+        }
+    }
+}
+
 void ParticleApp::resetParticles()
 {
     // Warm/cool palette.
@@ -56,6 +85,7 @@ void ParticleApp::resetParticles()
         particles_[i].x  = frandRange(X_MIN + 8.0f, X_MAX - 8.0f);
         particles_[i].y  = frandRange(Y_MIN + 4.0f, Y_MAX - 4.0f);
         particles_[i].z  = frandRange(Z_MIN + 8.0f, Z_MAX - 8.0f);
+        pushOutsideCoreRadius(particles_[i].x, particles_[i].z);
         particles_[i].vx = frandRange(-0.3f, 0.3f);
         particles_[i].vy = frandRange(-0.2f, 0.2f);
         particles_[i].vz = frandRange(-0.3f, 0.3f);
@@ -128,6 +158,7 @@ void ParticleApp::computeCursor(const SharedHandData& hand)
     curX_ = clampf(hand.lm_x[8] * (float)VOXEL_W, X_MIN, X_MAX);
     curY_ = clampf(hand.lm_y[8] * (float)VOXEL_H, Y_MIN, Y_MAX);
     curZ_ = clampf(smoothedZ_, Z_MIN, Z_MAX);
+    pushOutsideCoreRadius(curX_, curZ_);
     cursorValid_ = true;
 }
 
@@ -156,6 +187,7 @@ void ParticleApp::update(const SharedHandData& hand)
         particles_[i].vx = frandRange(-0.5f, 0.5f);
         particles_[i].vy = frandRange(-0.5f, 0.5f);
         particles_[i].vz = frandRange(-0.5f, 0.5f);
+        pushOutsideCoreRadius(particles_[i].x, particles_[i].z);
         spawnCooldown_ = 10;
     }
 
@@ -212,6 +244,7 @@ void ParticleApp::update(const SharedHandData& hand)
         p.x += p.vx;
         p.y += p.vy;
         p.z += p.vz;
+        pushOutsideCoreRadius(p.x, p.z, &p.vx, &p.vz);
     }
 }
 

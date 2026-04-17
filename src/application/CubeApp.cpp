@@ -1,5 +1,6 @@
 #include "CubeApp.h"
 #include "VoxelPaint.h"
+#include "DisplayConstraints.h"
 #include "../engine/Renderer.h"
 #include <cmath>
 #include <cstring>
@@ -47,9 +48,18 @@ void CubeApp::setup(Renderer& /*renderer*/) {}
 
 void CubeApp::update(const SharedHandData& hand)
 {
+    auto smoothCoreBias = [&]() {
+        float halfExtentZ = scale_ * 0.5f * (VOXEL_D - 1);
+        float tgtPosZ = CORE_SAFE_RADIUS_PX + halfExtentZ;
+        float maxPosZ = 0.5f * (VOXEL_D - 1) - halfExtentZ - 1.0f;
+        tgtPosZ = clampf(tgtPosZ, 0.0f, std::max(0.0f, maxPosZ));
+        posZ_ += (tgtPosZ - posZ_) * SMOOTHING_FACTOR;
+    };
+
     if (!hand.hand_detected) {
         posX_ *= 0.98f;   // slow exponential drift back to center (~3s at 60fps)
         posY_ *= 0.98f;
+        smoothCoreBias();
         return;
     }
 
@@ -80,6 +90,7 @@ void CubeApp::update(const SharedHandData& hand)
     scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
     posX_  += (tgtPosX  - posX_)  * SMOOTHING_FACTOR;
     posY_  += (tgtPosY  - posY_)  * SMOOTHING_FACTOR;
+    smoothCoreBias();
 }
 
 void CubeApp::draw(Renderer& renderer)
@@ -103,7 +114,7 @@ void CubeApp::draw(Renderer& renderer)
         //   Model z ∈ [-1,1] * scale_ → voxel Z ∈ [0, VOXEL_D-1]  (center at D/2)
         transformed[vi][0] = (rot[0] * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1) + posX_;
         transformed[vi][1] = (rot[1] * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1) + posY_;
-        transformed[vi][2] = (rot[2] * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1);
+        transformed[vi][2] = (rot[2] * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1) + posZ_;
     }
 
     // Paint all 12 edges using 3D DDA
