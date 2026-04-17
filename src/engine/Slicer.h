@@ -3,9 +3,10 @@
 #include <cstdint>
 #include <cstring>
 
-static constexpr int SLICE_COUNT = 240;
-static constexpr int SLICE_W     = 128;
-static constexpr int SLICE_H     = 64;
+static constexpr int SLICE_COUNT   = 240;
+static constexpr int SLICE_W       = 128;
+static constexpr int SLICE_H       = 64;
+static constexpr int PANEL_OFFSET  = 12;  // dead-zone: 48mm gap / 2mm P2 pitch / 2
 
 // Buffer holding all SLICE_COUNT slices of 128x64 RGBA8 data
 struct SliceBuffer {

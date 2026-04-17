@@ -9,6 +9,14 @@
 #include <sys/wait.h>
 #include <sys/mman.h>
 #include <getopt.h>
+#include <time.h>
+
+static inline uint64_t nowUs()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ULL + (uint64_t)ts.tv_nsec / 1000ULL;
+}
 
 // Derive project root from running executable (<root>/build/<name> → <root>)
 static std::string getHologramRoot()
@@ -110,12 +118,14 @@ static void usage(const char* prog)
 {
     fprintf(stderr,
         "Usage: %s --app <name> --ip <pi_ip> --port <port>\n"
-        "  --app       Application: cube, hand, pong, wireframe, fluid,\n"
-        "              dna, particles, menu  (default: cube)\n"
-        "  --ip        Target IP address of Raspberry Pi (default: 10.42.0.169)\n"
-        "  --port      Target UDP port (default: 4210)\n"
-        "  --obj       Path to .obj file (for wireframe app)\n"
-        "  --no-docker Skip launching the Docker hand tracker sidecar\n",
+        "  --app         Application: cube, hand, pong, wireframe, fluid,\n"
+        "                dna, particles, menu  (default: cube)\n"
+        "  --ip          Target IP address of Raspberry Pi (default: 10.42.0.169)\n"
+        "  --port        Target UDP port (default: 4210)\n"
+        "  --obj         Path to .obj file (for wireframe app)\n"
+        "  --no-docker   Skip launching the Docker hand tracker sidecar\n"
+        "  --timing-log [path]  Write per-frame timing CSV (omit path for auto-name\n"
+        "                       under /tmp/hologram_timing_<timestamp>.csv)\n",
         prog);
 }
 
@@ -125,34 +135,54 @@ static void usage(const char* prog)
 int main(int argc, char* argv[])
 {
     // Defaults
-    char     appName[32]   = "cube";
-    char     targetIP[64]  = "10.42.0.169";
-    uint16_t targetPort    = 4210;
-    bool     noDocker      = false;
-    char     objPath[256]  = "";
+    char     appName[32]      = "cube";
+    char     targetIP[64]     = "10.42.0.169";
+    uint16_t targetPort       = 4210;
+    bool     noDocker         = false;
+    char     objPath[256]     = "";
+    char     timingPath[512]  = "";   // empty = timing disabled
+    bool     timingAuto       = false; // true = auto-generate filename
 
     // Parse CLI
     static const struct option longopts[] = {
-        {"app",       required_argument, nullptr, 'a'},
-        {"ip",        required_argument, nullptr, 'i'},
-        {"port",      required_argument, nullptr, 'p'},
-        {"obj",       required_argument, nullptr, 'o'},
-        {"no-docker", no_argument,       nullptr, 'n'},
-        {"help",      no_argument,       nullptr, 'h'},
+        {"app",         required_argument, nullptr, 'a'},
+        {"ip",          required_argument, nullptr, 'i'},
+        {"port",        required_argument, nullptr, 'p'},
+        {"obj",         required_argument, nullptr, 'o'},
+        {"no-docker",   no_argument,       nullptr, 'n'},
+        {"timing-log",  optional_argument, nullptr, 't'},
+        {"help",        no_argument,       nullptr, 'h'},
         {nullptr, 0, nullptr, 0}
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "a:i:p:o:nh", longopts, nullptr)) != -1) {
+    while ((c = getopt_long(argc, argv, "a:i:p:o:nt::h", longopts, nullptr)) != -1) {
         switch (c) {
             case 'a': strncpy(appName, optarg, sizeof(appName)-1); break;
             case 'i': strncpy(targetIP, optarg, sizeof(targetIP)-1); break;
             case 'p': targetPort = (uint16_t)atoi(optarg); break;
             case 'o': strncpy(objPath, optarg, sizeof(objPath)-1); break;
             case 'n': noDocker = true; break;
+            case 't':
+                if (optarg && optarg[0]) {
+                    strncpy(timingPath, optarg, sizeof(timingPath)-1);
+                } else {
+                    timingAuto = true;
+                }
+                break;
             case 'h': usage(argv[0]); return 0;
             default:  usage(argv[0]); return 1;
         }
+    }
+
+    // Resolve auto timing log path
+    if (timingAuto) {
+        time_t now = time(nullptr);
+        struct tm* tm = localtime(&now);
+        snprintf(timingPath, sizeof(timingPath),
+                 "/tmp/hologram_timing_%04d%02d%02d_%02d%02d%02d.csv",
+                 tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
+                 tm->tm_hour, tm->tm_min, tm->tm_sec);
     }
 
     fprintf(stderr, "main: app=%s ip=%s port=%u\n", appName, targetIP, targetPort);
@@ -241,6 +271,23 @@ int main(int argc, char* argv[])
 
     SharedHandData handData = {};
 
+    // 6. Open timing log if requested
+    FILE* timingFp = nullptr;
+    if (timingPath[0] != '\0') {
+        timingFp = fopen(timingPath, "w");
+        if (!timingFp) {
+            fprintf(stderr, "main: WARNING — cannot open timing log: %s\n", timingPath);
+        } else {
+            fprintf(timingFp,
+                "frame_id,wall_us,syncReadback_us,update_draw_us,"
+                "kickDispatch_us,net_total_us,net_max_slice_us,total_frame_us\n");
+            fflush(timingFp);
+            fprintf(stderr, "main: timing log → %s\n", timingPath);
+        }
+    }
+
+    uint64_t frameId = 0;
+
     fprintf(stderr, "main: entering main loop (app=%s)\n", appName);
 
     // ----------------------------------------------------------------
@@ -264,6 +311,7 @@ int main(int argc, char* argv[])
         app->teardown(renderer);
         app = next;
         app->setup(renderer);
+        frameId = 0;
         bool newBypass = app->bypassSlicer();
         bool changed   = (newBypass != bypassSlicer);
         bypassSlicer   = newBypass;
@@ -278,9 +326,23 @@ int main(int argc, char* argv[])
       if (bypassSlicer) {
         // HandApp-style path: app sends UDP directly inside draw().
         while (g_running) {
+            uint64_t tStart = nowUs();
             inputBridge.read(handData, 8);
             app->update(handData);
+            uint64_t tAfterUpdate = nowUs();
             app->draw(renderer);
+            uint64_t tEnd = nowUs();
+
+            if (timingFp) {
+                fprintf(timingFp, "%llu,%llu,0,%llu,0,%llu,0,%llu\n",
+                    (unsigned long long)frameId++,
+                    (unsigned long long)tStart,
+                    (unsigned long long)(tAfterUpdate - tStart),
+                    (unsigned long long)(tEnd - tAfterUpdate),
+                    (unsigned long long)(tEnd - tStart));
+                if (frameId % 60 == 0) fflush(timingFp);
+            }
+
             if (trySwapApp()) break;  // bypass flag changed → re-enter
         }
       } else {
@@ -294,17 +356,41 @@ int main(int argc, char* argv[])
         slicer.kickDispatch(renderer.getVoxelTextureID());
 
         while (g_running) {
+            uint64_t tFrameStart = nowUs();
+
             slicer.syncReadback(*sliceBuffer);
+            uint64_t tAfterSync = nowUs();
 
             inputBridge.read(handData, 8);
             app->update(handData);
             renderer.clearVoxels();
             app->draw(renderer);
-            slicer.kickDispatch(renderer.getVoxelTextureID());
+            uint64_t tAfterDraw = nowUs();
 
+            slicer.kickDispatch(renderer.getVoxelTextureID());
+            uint64_t tAfterKick = nowUs();
+
+            uint64_t netMax = 0;
             for (int i = 0; i < SLICE_COUNT; ++i) {
+                uint64_t ts = nowUs();
                 network.sendSlice((uint8_t)i, &sliceBuffer->data[i][0][0][0]);
                 usleep(100);
+                uint64_t elapsed = nowUs() - ts;
+                if (elapsed > netMax) netMax = elapsed;
+            }
+            uint64_t tAfterNet = nowUs();
+
+            if (timingFp) {
+                fprintf(timingFp, "%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu\n",
+                    (unsigned long long)frameId++,
+                    (unsigned long long)tFrameStart,
+                    (unsigned long long)(tAfterSync - tFrameStart),
+                    (unsigned long long)(tAfterDraw - tAfterSync),
+                    (unsigned long long)(tAfterKick - tAfterDraw),
+                    (unsigned long long)(tAfterNet  - tAfterKick),
+                    (unsigned long long)netMax,
+                    (unsigned long long)(tAfterNet  - tFrameStart));
+                if (frameId % 60 == 0) fflush(timingFp);
             }
 
             if (trySwapApp()) {
@@ -323,6 +409,8 @@ int main(int argc, char* argv[])
     // Cleanup
     // ----------------------------------------------------------------
     fprintf(stderr, "main: shutting down\n");
+
+    if (timingFp) { fflush(timingFp); fclose(timingFp); timingFp = nullptr; }
 
     app->teardown(renderer);
     delete sliceBuffer;
