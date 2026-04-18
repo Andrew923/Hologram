@@ -86,9 +86,10 @@ void ParticleApp::resetParticles()
         particles_[i].y  = frandRange(Y_MIN + 4.0f, Y_MAX - 4.0f);
         particles_[i].z  = frandRange(Z_MIN + 8.0f, Z_MAX - 8.0f);
         pushOutsideCoreRadius(particles_[i].x, particles_[i].z);
-        particles_[i].vx = frandRange(-0.3f, 0.3f);
-        particles_[i].vy = frandRange(-0.2f, 0.2f);
-        particles_[i].vz = frandRange(-0.3f, 0.3f);
+        particles_[i].vx   = frandRange(-0.3f, 0.3f);
+        particles_[i].vy   = frandRange(-0.2f, 0.2f);
+        particles_[i].vz   = frandRange(-0.3f, 0.3f);
+        particles_[i].size = frandRange(1.0f, 2.5f);
         const uint8_t* c = palette[i % 6];
         particles_[i].r = c[0];
         particles_[i].g = c[1];
@@ -184,9 +185,10 @@ void ParticleApp::update(const SharedHandData& hand)
         particles_[i].x = curX_;
         particles_[i].y = curY_;
         particles_[i].z = curZ_;
-        particles_[i].vx = frandRange(-0.5f, 0.5f);
-        particles_[i].vy = frandRange(-0.5f, 0.5f);
-        particles_[i].vz = frandRange(-0.5f, 0.5f);
+        particles_[i].vx   = frandRange(-0.5f, 0.5f);
+        particles_[i].vy   = frandRange(-0.5f, 0.5f);
+        particles_[i].vz   = frandRange(-0.5f, 0.5f);
+        particles_[i].size = frandRange(1.0f, 2.5f);
         pushOutsideCoreRadius(particles_[i].x, particles_[i].z);
         spawnCooldown_ = 10;
     }
@@ -253,19 +255,13 @@ void ParticleApp::draw(Renderer& renderer)
     static uint8_t voxels[VOXEL_BYTES];
     memset(voxels, 0, sizeof(voxels));
 
-    // Paint particles as 7-voxel "plus" clusters (center + 6 face neighbors).
+    // Paint particles as spheres with per-particle size variation.
     for (int i = 0; i < N_PARTICLES; ++i) {
         const Particle& p = particles_[i];
         int ix = (int)roundf(p.x);
         int iy = (int)roundf(p.y);
         int iz = (int)roundf(p.z);
-        voxpaint::paintVoxel(voxels, ix,     iy,     iz,     p.r, p.g, p.b);
-        voxpaint::paintVoxel(voxels, ix + 1, iy,     iz,     p.r, p.g, p.b);
-        voxpaint::paintVoxel(voxels, ix - 1, iy,     iz,     p.r, p.g, p.b);
-        voxpaint::paintVoxel(voxels, ix,     iy + 1, iz,     p.r, p.g, p.b);
-        voxpaint::paintVoxel(voxels, ix,     iy - 1, iz,     p.r, p.g, p.b);
-        voxpaint::paintVoxel(voxels, ix,     iy,     iz + 1, p.r, p.g, p.b);
-        voxpaint::paintVoxel(voxels, ix,     iy,     iz - 1, p.r, p.g, p.b);
+        voxpaint::paintSphere(voxels, ix, iy, iz, p.size, p.r, p.g, p.b);
     }
 
     // Paint red cursor cube at the fingertip.

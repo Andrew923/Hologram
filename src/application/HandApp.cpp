@@ -1,9 +1,12 @@
 #include "HandApp.h"
+#include "VoxelPaint.h"
 #include "../engine/Renderer.h"
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
 #include <ctime>
+#include <cmath>
+#include <algorithm>
 #include <initializer_list>
 
 // constexpr definitions (required in some C++17 contexts)
@@ -23,59 +26,39 @@ static bool isFingertip(int idx) {
     return false;
 }
 
-// -----------------------------------------------------------------------
-// Bresenham line drawing on 128×64 BGR canvas
-// -----------------------------------------------------------------------
-void HandApp::drawPixel(uint8_t* canvas, int x, int y,
-                         uint8_t r, uint8_t g, uint8_t b)
-{
-    if (x < 0 || x >= 128 || y < 0 || y >= 64) return;
-    int idx = (y * 128 + x) * 3;
-    canvas[idx + 0] = b;   // BGR storage
-    canvas[idx + 1] = g;
-    canvas[idx + 2] = r;
+static inline float clampf(float x, float lo, float hi) {
+    return x < lo ? lo : (x > hi ? hi : x);
 }
 
-void HandApp::drawLine(uint8_t* canvas,
-                        int x0, int y0, int x1, int y1,
-                        uint8_t r, uint8_t g, uint8_t b)
-{
-    int dx =  abs(x1 - x0);
-    int dy =  abs(y1 - y0);
-    int sx = (x0 < x1) ? 1 : -1;
-    int sy = (y0 < y1) ? 1 : -1;
-    int err = dx - dy;
-
-    while (true) {
-        drawPixel(canvas, x0, y0, r, g, b);
-        if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 > -dy) { err -= dy; x0 += sx; }
-        if (e2 <  dx) { err += dx; y0 += sy; }
-    }
-}
+// Depth mapping constants (mirrors ParticleApp)
+static constexpr float Z_MIN = 16.0f, Z_MAX = 112.0f;
+static constexpr float FALLBACK_BONE_PX_NEAR = 0.22f;
+static constexpr float FALLBACK_BONE_PX_FAR  = 0.06f;
 
 // -----------------------------------------------------------------------
 // IApplication interface
 // -----------------------------------------------------------------------
 void HandApp::setup(Renderer& /*renderer*/)
 {
-    // Initialize all OneEuroFilter instances with plan parameters
+    camOk_ = cam_.loadFromFile("config/camera.json");
+    if (camOk_) {
+        fprintf(stderr,
+                "HandApp: loaded camera config (fx=%.1f bone=%.3fm)\n",
+                cam_.fx, cam_.user_index_bone_m);
+    } else {
+        fprintf(stderr, "HandApp: no camera.json, using hand-size depth proxy\n");
+    }
+
     for (int i = 0; i < 21; ++i) {
         filtersX_[i] = OneEuroFilter(1.0f, 0.5f, 1.0f);
         filtersY_[i] = OneEuroFilter(1.0f, 0.5f, 1.0f);
     }
 }
 
-static inline float clampf(float x, float lo, float hi) {
-    return x < lo ? lo : (x > hi ? hi : x);
-}
-
 void HandApp::update(const SharedHandData& hand)
 {
     anyValid_ = false;
     if (!hand.hand_detected) {
-        // Drift palm anchor back to canvas center (mirrors CubeApp drift)
         posX_ += (64.0f - posX_) * 0.02f;
         posY_ += (32.0f - posY_) * 0.02f;
 
@@ -87,31 +70,49 @@ void HandApp::update(const SharedHandData& hand)
         return;
     }
 
-    // Check wrist is non-zero
     if (hand.lm_x[0] == 0.0f && hand.lm_y[0] == 0.0f) return;
 
     anyValid_ = true;
     double t = hand.timestamp > 0.0 ? hand.timestamp : nowSeconds();
 
     for (int i = 0; i < 21; ++i) {
-        // Scale normalized [0,1] landmark to canvas pixels
         float rawX = hand.lm_x[i] * 128.0f;
         float rawY = hand.lm_y[i] * 64.0f;
-
         smoothX_[i] = filtersX_[i].filter(rawX, t);
         smoothY_[i] = filtersY_[i].filter(rawY, t);
     }
 
-    // Palm center clamping (mirrors CubeApp logic, adapted for 128×64 canvas).
-    // posX_ stays within [16, 112], posY_ within [8, 56] — 16 px margin on each edge.
-    float palmX  = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
-    float palmY  = (hand.lm_y[0] + hand.lm_y[9]) * 0.5f;
+    // Palm anchor clamping
+    float palmX   = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
+    float palmY   = (hand.lm_y[0] + hand.lm_y[9]) * 0.5f;
     float tgtPosX = clampf(palmX * 128.0f, 16.0f, 112.0f);
     float tgtPosY = clampf(palmY *  64.0f,  8.0f,  56.0f);
     posX_ += (tgtPosX - posX_) * 0.3f;
     posY_ += (tgtPosY - posY_) * 0.3f;
 
-    // Gesture detection — print to terminal on change
+    // Depth estimation: wrist(0) → index MCP(5) bone length
+    float dx_n = hand.lm_x[5] - hand.lm_x[0];
+    float dy_n = hand.lm_y[5] - hand.lm_y[0];
+    float bone_norm = hypotf(dx_n, dy_n);
+    if (bone_norm >= 1e-4f) {
+        float zVoxel;
+        if (camOk_) {
+            float L_px = std::max(hypotf(
+                dx_n * (float)cam_.image_width,
+                dy_n * (float)cam_.image_height), 1.0f);
+            float Z_m = cam_.fx * cam_.user_index_bone_m / L_px;
+            float tf = clampf((Z_m - 0.25f) / 0.50f, 0.0f, 1.0f);
+            zVoxel = Z_MAX - tf * (Z_MAX - Z_MIN);
+        } else {
+            float tf = clampf((bone_norm - FALLBACK_BONE_PX_FAR)
+                              / (FALLBACK_BONE_PX_NEAR - FALLBACK_BONE_PX_FAR),
+                              0.0f, 1.0f);
+            zVoxel = Z_MIN + tf * (Z_MAX - Z_MIN);
+        }
+        smoothedZ_ += (zVoxel - smoothedZ_) * 0.25f;
+    }
+
+    // Gesture detection
     Gesture g = detectGesture(hand);
     if (g != lastGesture_) {
         printf("[gesture] %s\n", gestureName(g));
@@ -120,45 +121,38 @@ void HandApp::update(const SharedHandData& hand)
     }
 }
 
-void HandApp::draw(Renderer& /*renderer*/)
+void HandApp::draw(Renderer& renderer)
 {
-    // Clear canvas to black
-    memset(canvas_, 0, sizeof(canvas_));
+    static uint8_t voxels[VOXEL_BYTES];
+    memset(voxels, 0, sizeof(voxels));
 
     if (anyValid_) {
-        // Compute offset so the palm anchor sits at (posX_, posY_).
-        // This shifts the whole skeleton to keep the palm within the canvas margin.
         float palCX = (smoothX_[0] + smoothX_[9]) * 0.5f;
         float palCY = (smoothY_[0] + smoothY_[9]) * 0.5f;
         float offX  = posX_ - palCX;
         float offY  = posY_ - palCY;
+        int iz = (int)roundf(clampf(smoothedZ_, Z_MIN, Z_MAX));
 
-        // Draw skeleton connections (white bones)
+        // Draw 3D bones
         for (auto& conn : CONNECTIONS) {
             int j1 = conn[0], j2 = conn[1];
-            int px1 = (int)(smoothX_[j1] + offX), py1 = (int)(smoothY_[j1] + offY);
-            int px2 = (int)(smoothX_[j2] + offX), py2 = (int)(smoothY_[j2] + offY);
-            // Skip if both endpoints are at origin (undetected)
-            if ((px1 == 0 && py1 == 0) || (px2 == 0 && py2 == 0)) continue;
-            drawLine(canvas_, px1, py1, px2, py2, 255, 255, 255);
+            int x1 = (int)(smoothX_[j1] + offX), y1 = (int)(smoothY_[j1] + offY);
+            int x2 = (int)(smoothX_[j2] + offX), y2 = (int)(smoothY_[j2] + offY);
+            if ((x1 == 0 && y1 == 0) || (x2 == 0 && y2 == 0)) continue;
+            voxpaint::paint3DLine(voxels, x1, y1, iz, x2, y2, iz, 255, 255, 255);
         }
 
         // Draw joints
         for (int i = 0; i < 21; ++i) {
-            int px = (int)(smoothX_[i] + offX);
-            int py = (int)(smoothY_[i] + offY);
-            if (px == 0 && py == 0) continue;
-
-            if (isFingertip(i)) {
-                // Red for fingertips
-                drawPixel(canvas_, px, py, 255, 0, 0);
-            } else {
-                // Green for other joints
-                drawPixel(canvas_, px, py, 0, 255, 0);
-            }
+            int ix = (int)(smoothX_[i] + offX);
+            int iy = (int)(smoothY_[i] + offY);
+            if (ix == 0 && iy == 0) continue;
+            if (isFingertip(i))
+                voxpaint::paintCube(voxels, ix, iy, iz, 1, 255, 0, 0);
+            else
+                voxpaint::paintVoxel(voxels, ix, iy, iz, 0, 255, 0);
         }
     }
 
-    // Send via network (HandApp owns UDP send; bypasses slicer)
-    network_.sendHandFrame(frameID_++, canvas_);
+    renderer.uploadVoxelBuffer(voxels);
 }

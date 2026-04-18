@@ -2,6 +2,8 @@
 #include "IApplication.h"
 #include "GestureDetector.h"
 #include "../engine/Network.h"
+#include "../engine/CameraConfig.h"
+#include "DisplayConstraints.h"
 #include <cstdint>
 #include <cmath>
 #include <ctime>
@@ -65,7 +67,7 @@ public:
     void update(const SharedHandData& hand)  override;
     void draw(Renderer&)                     override;
     void teardown(Renderer&)                 override {}
-    bool bypassSlicer() const                override { return true; }
+    bool bypassSlicer() const                override { return false; }
 
 private:
     Network& network_;
@@ -87,11 +89,10 @@ private:
     // Gesture tracking: print to terminal on each change
     Gesture lastGesture_ = Gesture::NONE;
 
-    // 128×64 BGR canvas
-    uint8_t canvas_[64 * 128 * 3] = {};
-
-    // Frame counter (wraps 0-255)
-    uint8_t frameID_ = 0;
+    // Camera config and depth estimation
+    CameraConfig cam_;
+    bool         camOk_     = false;
+    float        smoothedZ_ = 64.0f;
 
     // Hand skeleton connections (MediaPipe native order)
     static constexpr int CONNECTIONS[20][2] = {
@@ -103,9 +104,4 @@ private:
     };
     static constexpr int FINGERTIP_INDICES[5] = {4, 8, 12, 16, 20};
 
-    static void drawLine(uint8_t* canvas,
-                         int x0, int y0, int x1, int y1,
-                         uint8_t r, uint8_t g, uint8_t b);
-    static void drawPixel(uint8_t* canvas, int x, int y,
-                          uint8_t r, uint8_t g, uint8_t b);
 };
