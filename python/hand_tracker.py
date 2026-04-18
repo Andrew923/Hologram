@@ -25,11 +25,13 @@ import mediapipe as mp
 from shared_mem_writer import SharedMemWriter
 
 # Camera settings
-CAM_INDEX   = 0
 CAM_WIDTH   = 224
 CAM_HEIGHT  = 224
 CAM_BUFFER  = 1   # small buffer = low latency
 CAM_FPS     = 30  # cap frame rate to reduce camera firmware stress
+
+CAM_RECONNECT_DELAY = 1.5   # seconds to wait before reconnect attempt
+CAM_RECONNECT_TRIES = 10    # max consecutive reconnect attempts before exiting
 
 # Shared memory retry parameters
 SHM_RETRY_INTERVAL = 0.5   # seconds between retries
@@ -67,34 +69,32 @@ def main():
         print("hand_tracker: timed out waiting for shared memory, exiting", flush=True)
         sys.exit(1)
 
-    # 2. Open camera — retry for up to 30 s (device may appear after container starts)
-    cap = None
+    # 2. Open camera — try /dev/video0 and /dev/video1, use whichever opens
+    def open_camera():
+        for idx in (0, 1):
+            c = cv2.VideoCapture(idx, cv2.CAP_V4L2)
+            if c.isOpened():
+                c.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
+                c.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
+                c.set(cv2.CAP_PROP_BUFFERSIZE,   CAM_BUFFER)
+                c.set(cv2.CAP_PROP_FPS,          CAM_FPS)
+                print(f"hand_tracker: opened /dev/video{idx}", flush=True)
+                return c
+            c.release()
+        return None
+
     cam_deadline = time.monotonic() + 30.0
-    while time.monotonic() < cam_deadline and _running:
-        c = cv2.VideoCapture(CAM_INDEX, cv2.CAP_V4L2)
-        if c.isOpened():
-            cap = c
-            break
-        c.release()
-        print("hand_tracker: waiting for /dev/video0...", flush=True)
-        time.sleep(1.0)
+    cap = None
+    while cap is None and time.monotonic() < cam_deadline and _running:
+        cap = open_camera()
+        if cap is None:
+            print("hand_tracker: waiting for camera...", flush=True)
+            time.sleep(1.0)
 
-    if cap is None or not cap.isOpened():
-        # Camera may have briefly disconnected and re-enumerated as /dev/video1
-        c1 = cv2.VideoCapture(1, cv2.CAP_V4L2)
-        if c1.isOpened():
-            cap = c1
-            print("hand_tracker: opened /dev/video1 as fallback", flush=True)
-        else:
-            c1.release()
-            print("hand_tracker: could not open camera after 30 s, exiting", flush=True)
-            writer.close()
-            sys.exit(1)
-
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE,   CAM_BUFFER)
-    cap.set(cv2.CAP_PROP_FPS,          CAM_FPS)
+    if cap is None:
+        print("hand_tracker: could not open camera after 30 s, exiting", flush=True)
+        writer.close()
+        sys.exit(1)
 
     # 3. Initialize MediaPipe Hands
     mp_hands = mp.solutions.hands
@@ -111,18 +111,29 @@ def main():
     zero_lm = [0.0] * 21
 
     consecutive_failures = 0
-    MAX_CONSECUTIVE_FAILURES = 10
+    reconnect_attempts = 0
 
     while _running:
         ret, frame = cap.read()
         if not ret or frame is None:
             consecutive_failures += 1
-            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-                print(f"hand_tracker: camera read failed {MAX_CONSECUTIVE_FAILURES} times in a row, exiting", flush=True)
-                break
-            time.sleep(0.05)  # avoid hammering V4L2 on transient errors
+            if consecutive_failures >= 10:
+                if reconnect_attempts >= CAM_RECONNECT_TRIES:
+                    print("hand_tracker: could not reconnect camera, exiting", flush=True)
+                    break
+                reconnect_attempts += 1
+                print(f"hand_tracker: camera lost, reconnect attempt {reconnect_attempts}/{CAM_RECONNECT_TRIES}", flush=True)
+                cap.release()
+                time.sleep(CAM_RECONNECT_DELAY)
+                new_cap = open_camera()
+                if new_cap is not None:
+                    cap = new_cap
+                    consecutive_failures = 0
+            else:
+                time.sleep(0.05)  # avoid hammering V4L2 on transient errors
             continue
         consecutive_failures = 0
+        reconnect_attempts = 0
 
         # Mirror horizontally (matches cube.py and 2d_send.py)
         frame = cv2.flip(frame, 1)
