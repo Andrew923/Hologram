@@ -4,8 +4,6 @@
 #include "../engine/Renderer.h"
 #include <cmath>
 #include <cstring>
-#include <cstdio>
-#include <algorithm>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -41,33 +39,15 @@ static constexpr float SMOOTHING_FACTOR = 0.1f;
 static constexpr float SCALE_MIN = SCALE_MIN_PX / (VOXEL_H - 1);
 static constexpr float SCALE_MAX = SCALE_MAX_PX / (VOXEL_H - 1);
 
-// Depth mapping constants (mirrors ParticleApp)
-static constexpr float Z_MIN_VOXEL = 16.0f, Z_MAX_VOXEL = 112.0f;
-static constexpr float FALLBACK_BONE_PX_NEAR = 0.22f;
-static constexpr float FALLBACK_BONE_PX_FAR  = 0.06f;
-
 // -----------------------------------------------------------------------
 // IApplication interface
 // -----------------------------------------------------------------------
-void CubeApp::setup(Renderer& /*renderer*/)
-{
-    camOk_ = cam_.loadFromFile("config/camera.json");
-    if (camOk_) {
-        fprintf(stderr,
-                "CubeApp: loaded camera config (fx=%.1f bone=%.3fm)\n",
-                cam_.fx, cam_.user_index_bone_m);
-    } else {
-        fprintf(stderr, "CubeApp: no camera.json, using hand-size depth proxy\n");
-    }
-}
+void CubeApp::setup(Renderer& /*renderer*/) {}
 
 void CubeApp::update(const SharedHandData& hand)
 {
-    static constexpr float CENTER_Z = 0.5f * (VOXEL_D - 1);   // 63.5 voxels
-
     if (!hand.hand_detected) {
         posX_ *= 0.98f;
-        posY_ *= 0.98f;
         posZ_ += (0.0f - posZ_) * SMOOTHING_FACTOR;   // drift back to center
         return;
     }
@@ -84,35 +64,11 @@ void CubeApp::update(const SharedHandData& hand)
     float tgtScale = SCALE_MIN + clampf((pinch - 0.03f) / 0.22f, 0.0f, 1.0f)
                                  * (SCALE_MAX - SCALE_MIN);
 
-    // XY position: palm center mapped to full voxel range
+    // Camera X → voxel X, camera Y → voxel Z (horizontal plane)
     float palmX   = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
     float palmY   = (hand.lm_y[0] + hand.lm_y[9]) * 0.5f;
     float tgtPosX = clampf((palmX - 0.5f) * (float)VOXEL_W, -48.0f, 48.0f);
-    float tgtPosY = clampf((palmY - 0.5f) * (float)VOXEL_H, -24.0f, 24.0f);
-
-    // Depth estimation: wrist(0) → index MCP(5) bone length
-    float dx_n = hand.lm_x[5] - hand.lm_x[0];
-    float dy_n = hand.lm_y[5] - hand.lm_y[0];
-    float bone_norm = hypotf(dx_n, dy_n);
-    if (bone_norm >= 1e-4f) {
-        float zVoxel;
-        if (camOk_) {
-            float L_px = std::max(hypotf(
-                dx_n * (float)cam_.image_width,
-                dy_n * (float)cam_.image_height), 1.0f);
-            float Z_m = cam_.fx * cam_.user_index_bone_m / L_px;
-            float tf = clampf((Z_m - 0.25f) / 0.50f, 0.0f, 1.0f);
-            zVoxel = Z_MAX_VOXEL - tf * (Z_MAX_VOXEL - Z_MIN_VOXEL);
-        } else {
-            float tf = clampf((bone_norm - FALLBACK_BONE_PX_FAR)
-                              / (FALLBACK_BONE_PX_NEAR - FALLBACK_BONE_PX_FAR),
-                              0.0f, 1.0f);
-            zVoxel = Z_MIN_VOXEL + tf * (Z_MAX_VOXEL - Z_MIN_VOXEL);
-        }
-        smoothedZ_ += (zVoxel - smoothedZ_) * 0.25f;
-    }
-    // posZ_ is an offset from the model center (63.5); map absolute depth → offset.
-    float tgtPosZ = smoothedZ_ - CENTER_Z;
+    float tgtPosZ = clampf((palmY - 0.5f) * (float)VOXEL_D, -48.0f, 48.0f);
 
     // Exponential smoothing
     rotX_  += (tgtRotX  - rotX_)  * SMOOTHING_FACTOR;
@@ -121,7 +77,6 @@ void CubeApp::update(const SharedHandData& hand)
     scale_ += (tgtScale - scale_) * SMOOTHING_FACTOR;
     scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
     posX_  += (tgtPosX  - posX_)  * SMOOTHING_FACTOR;
-    posY_  += (tgtPosY  - posY_)  * SMOOTHING_FACTOR;
     posZ_  += (tgtPosZ  - posZ_)  * SMOOTHING_FACTOR;
 }
 

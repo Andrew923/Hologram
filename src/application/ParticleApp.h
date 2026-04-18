@@ -1,7 +1,6 @@
 #pragma once
 #include "IApplication.h"
 #include "ReturnToMenuWatcher.h"
-#include "../engine/CameraConfig.h"
 #include <cstdint>
 
 // -----------------------------------------------------------------------
@@ -52,12 +51,6 @@ private:
     float curY_ = 32.0f;
     float curZ_ = 64.0f;
     bool  cursorValid_ = false;
-
-    // One-euro-ish smoothing for Z (bone-length is noisy).
-    float smoothedZ_ = 64.0f;
-
-    CameraConfig cam_;
-    bool camOk_ = false;
 
     int spawnCooldown_ = 0;
 

@@ -2,7 +2,6 @@
 #include "IApplication.h"
 #include "GestureDetector.h"
 #include "../engine/Network.h"
-#include "../engine/CameraConfig.h"
 #include "DisplayConstraints.h"
 #include <cstdint>
 #include <cmath>
@@ -74,25 +73,20 @@ private:
 
     // One Euro Filters: 21 joints × 2 axes = 42 instances
     OneEuroFilter filtersX_[21];
-    OneEuroFilter filtersY_[21];
+    OneEuroFilter filtersZ_[21];
 
-    // Smoothed joint positions in canvas space [0,128) × [0,64)
+    // Smoothed joint positions: X in [0,128), Z in [0,128) (horizontal plane)
     float smoothX_[21] = {};
-    float smoothY_[21] = {};
+    float smoothZ_[21] = {};
     bool  anyValid_ = false;
 
     // Clamped palm anchor: keeps skeleton near the canvas interior.
-    // posX_ ∈ [16, 112],  posY_ ∈ [8, 56]  (initialized to canvas center)
+    // posX_ ∈ [16, 112],  posZ_ ∈ [16, 112]  (initialized to canvas center)
     float posX_ = 64.0f;
-    float posY_ = 32.0f;
+    float posZ_ = 64.0f;
 
     // Gesture tracking: print to terminal on each change
     Gesture lastGesture_ = Gesture::NONE;
-
-    // Camera config and depth estimation
-    CameraConfig cam_;
-    bool         camOk_     = false;
-    float        smoothedZ_ = 64.0f;
 
     // Hand skeleton connections (MediaPipe native order)
     static constexpr int CONNECTIONS[20][2] = {
