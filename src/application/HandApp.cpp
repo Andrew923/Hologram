@@ -45,6 +45,7 @@ void HandApp::setup(Renderer& /*renderer*/)
 
 void HandApp::update(const SharedHandData& hand)
 {
+    menuWatcher_.update(hand);
     anyValid_ = false;
     if (!hand.hand_detected) {
         posX_ += (64.0f - posX_) * 0.02f;

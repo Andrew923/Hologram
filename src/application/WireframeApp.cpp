@@ -118,6 +118,7 @@ bool WireframeApp::isFingerExtended(const SharedHandData& hand, int tipIdx, int 
 // -----------------------------------------------------------------------
 void WireframeApp::update(const SharedHandData& hand)
 {
+    menuWatcher_.update(hand);
     handPresent_ = hand.hand_detected;
 
     if (!hand.hand_detected) {

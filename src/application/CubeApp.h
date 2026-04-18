@@ -1,5 +1,6 @@
 #pragma once
 #include "IApplication.h"
+#include "ReturnToMenuWatcher.h"
 #include <cstdint>
 
 class CubeApp : public IApplication {
@@ -13,7 +14,12 @@ public:
     void teardown(Renderer&)                override {}
     bool bypassSlicer() const               override { return false; }
 
+    const char* requestedApp() const override {
+        return menuWatcher_.shouldReturn() ? "menu" : nullptr;
+    }
+
 private:
+    ReturnToMenuWatcher menuWatcher_;
     // Current smoothed rotation angles (radians), scale, and position offset
     float rotX_   = 0.0f;
     float rotY_   = 0.0f;

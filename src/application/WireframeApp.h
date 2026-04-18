@@ -1,5 +1,6 @@
 #pragma once
 #include "IApplication.h"
+#include "ReturnToMenuWatcher.h"
 #include "../engine/ObjLoader.h"
 #include <cstdint>
 #include <string>
@@ -20,7 +21,12 @@ public:
     void teardown(Renderer&)                override {}
     bool bypassSlicer() const               override { return false; }
 
+    const char* requestedApp() const override {
+        return menuWatcher_.shouldReturn() ? "menu" : nullptr;
+    }
+
 private:
+    ReturnToMenuWatcher menuWatcher_;
     std::string objPath_;
     ObjMesh mesh_;
 

@@ -46,6 +46,7 @@ void CubeApp::setup(Renderer& /*renderer*/) {}
 
 void CubeApp::update(const SharedHandData& hand)
 {
+    menuWatcher_.update(hand);
     if (!hand.hand_detected) {
         posX_ *= 0.98f;
         posZ_ += (0.0f - posZ_) * SMOOTHING_FACTOR;   // drift back to center

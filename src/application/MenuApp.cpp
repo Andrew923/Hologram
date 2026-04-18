@@ -16,7 +16,7 @@
 // -----------------------------------------------------------------------
 // Tunables
 // -----------------------------------------------------------------------
-static constexpr int   THUMBS_UP_LAUNCH_FRAMES = 20;   // ~0.5s at 40fps
+static constexpr int   THUMBS_UP_LAUNCH_FRAMES = 60;   // ~1.5s at 40fps
 static constexpr float SMOOTHING    = 0.35f;
 static constexpr float ANGULAR_GAIN = 0.40f;
 static constexpr float ANGULAR_DECAY = 0.90f;

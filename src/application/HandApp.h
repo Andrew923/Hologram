@@ -1,6 +1,7 @@
 #pragma once
 #include "IApplication.h"
 #include "GestureDetector.h"
+#include "ReturnToMenuWatcher.h"
 #include "../engine/Network.h"
 #include "DisplayConstraints.h"
 #include <cstdint>
@@ -68,8 +69,13 @@ public:
     void teardown(Renderer&)                 override {}
     bool bypassSlicer() const                override { return false; }
 
+    const char* requestedApp() const override {
+        return menuWatcher_.shouldReturn() ? "menu" : nullptr;
+    }
+
 private:
     Network& network_;
+    ReturnToMenuWatcher menuWatcher_;
 
     // One Euro Filters: 21 joints × 2 axes = 42 instances
     OneEuroFilter filtersX_[21];
