@@ -29,6 +29,7 @@ CAM_INDEX   = 0
 CAM_WIDTH   = 224
 CAM_HEIGHT  = 224
 CAM_BUFFER  = 1   # small buffer = low latency
+CAM_FPS     = 30  # cap frame rate to reduce camera firmware stress
 
 # Shared memory retry parameters
 SHM_RETRY_INTERVAL = 0.5   # seconds between retries
@@ -93,6 +94,7 @@ def main():
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)
     cap.set(cv2.CAP_PROP_BUFFERSIZE,   CAM_BUFFER)
+    cap.set(cv2.CAP_PROP_FPS,          CAM_FPS)
 
     # 3. Initialize MediaPipe Hands
     mp_hands = mp.solutions.hands
