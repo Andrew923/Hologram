@@ -7,6 +7,7 @@ layout(local_size_x = 64, local_size_y = 4, local_size_z = 1) in;
 // 12 px per side.  Each panel sweeps a chord offset by this amount from the
 // spin axis, not a diameter through the axis.
 #define PANEL_OFFSET 12.0
+#define MASK_RADIUS  (PANEL_OFFSET + 1.0)
 
 // 3D voxel grid sampler — 128(X) × 64(Y) × 128(Z), RGBA8
 layout(binding = 0) uniform sampler3D uVoxelGrid;
@@ -28,6 +29,14 @@ void main()
     float vox_x = (64.0 + PANEL_OFFSET * cosT - t * sinT) / 128.0;
     float vox_y = float(coord.y) / 64.0;
     float vox_z = (64.0 + PANEL_OFFSET * sinT + t * cosT) / 128.0;
+
+    // Blank the center cylinder — panels can never illuminate within PANEL_OFFSET of the spin axis
+    float cx = vox_x * 128.0 - 64.0;
+    float cz = vox_z * 128.0 - 64.0;
+    if (cx * cx + cz * cz < MASK_RADIUS * MASK_RADIUS) {
+        imageStore(uSliceOut, ivec3(coord, sliceIndex), vec4(0.0));
+        return;
+    }
 
     vec4 color = texture(uVoxelGrid, vec3(vox_x, vox_y, vox_z));
     imageStore(uSliceOut, ivec3(coord, sliceIndex), color);

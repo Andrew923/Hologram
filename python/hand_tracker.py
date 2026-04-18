@@ -79,9 +79,16 @@ def main():
         time.sleep(1.0)
 
     if cap is None or not cap.isOpened():
-        print("hand_tracker: could not open camera after 30 s, exiting", flush=True)
-        writer.close()
-        sys.exit(1)
+        # Camera may have briefly disconnected and re-enumerated as /dev/video1
+        c1 = cv2.VideoCapture(1, cv2.CAP_V4L2)
+        if c1.isOpened():
+            cap = c1
+            print("hand_tracker: opened /dev/video1 as fallback", flush=True)
+        else:
+            c1.release()
+            print("hand_tracker: could not open camera after 30 s, exiting", flush=True)
+            writer.close()
+            sys.exit(1)
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  CAM_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAM_HEIGHT)

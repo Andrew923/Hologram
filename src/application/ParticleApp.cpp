@@ -5,9 +5,7 @@
 #include "../engine/Renderer.h"
 #include <cmath>
 #include <cstring>
-#include <cstdio>
 #include <cstdlib>
-#include <algorithm>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -28,10 +26,6 @@ static constexpr float NEIGHBOR_STRENGTH = 0.35f;
 static constexpr float X_MIN = 16.0f, X_MAX = 112.0f;
 static constexpr float Y_MIN =  8.0f, Y_MAX =  56.0f;
 static constexpr float Z_MIN = 16.0f, Z_MAX = 112.0f;
-
-// Z depth mapping when using hand-size fallback (no camera.json).
-static constexpr float FALLBACK_BONE_PX_NEAR = 0.22f;  // normalized dist at "near"
-static constexpr float FALLBACK_BONE_PX_FAR  = 0.06f;  // normalized dist at "far"
 
 static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -99,16 +93,6 @@ void ParticleApp::resetParticles()
 
 void ParticleApp::setup(Renderer& /*renderer*/)
 {
-    camOk_ = cam_.loadFromFile("config/camera.json");
-    if (camOk_) {
-        fprintf(stderr,
-                "ParticleApp: loaded camera config (fx=%.1f fy=%.1f "
-                "bone=%.3fm)\n", cam_.fx, cam_.fy, cam_.user_index_bone_m);
-    } else {
-        fprintf(stderr,
-                "ParticleApp: no camera.json, using hand-size depth proxy\n");
-    }
-
     srand(12345);  // deterministic starting layout
     resetParticles();
 }
@@ -118,47 +102,10 @@ void ParticleApp::computeCursor(const SharedHandData& hand)
     cursorValid_ = false;
     if (!hand.hand_detected) return;
 
-    // Observed bone pixel length (wrist → index MCP) in normalized units.
-    // In pinhole-correct mode we scale to image pixels; the proxy mode
-    // just uses the normalized value directly.
-    float dx_n = hand.lm_x[5] - hand.lm_x[0];
-    float dy_n = hand.lm_y[5] - hand.lm_y[0];
-    float bone_norm = hypotf(dx_n, dy_n);
-    if (bone_norm < 1e-4f) return;
-
-    float zVoxel = 64.0f;
-
-    if (camOk_) {
-        // Pinhole unprojection — metric Z of wrist in meters.
-        float px_wrist = hand.lm_x[0] * (float)cam_.image_width;
-        float py_wrist = hand.lm_y[0] * (float)cam_.image_height;
-        float px_mcp   = hand.lm_x[5] * (float)cam_.image_width;
-        float py_mcp   = hand.lm_y[5] * (float)cam_.image_height;
-        float L_px = hypotf(px_mcp - px_wrist, py_mcp - py_wrist);
-        L_px = std::max(L_px, 1.0f);
-
-        float Z_m = cam_.fx * cam_.user_index_bone_m / L_px;
-
-        // Working volume ~40cm deep, centered at the user's arm's length.
-        // Accept Z in [0.25, 0.75] m; remap linearly to [Z_MIN, Z_MAX].
-        float t = clampf((Z_m - 0.25f) / 0.50f, 0.0f, 1.0f);
-        // Closer to camera (smaller Z) → nearer face of the volume (larger
-        // voxel Z so the cursor appears "in front").
-        zVoxel = Z_MAX - t * (Z_MAX - Z_MIN);
-    } else {
-        // Fallback: normalized bone length directly. Larger bone → closer.
-        float t = clampf((bone_norm - FALLBACK_BONE_PX_FAR)
-                         / (FALLBACK_BONE_PX_NEAR - FALLBACK_BONE_PX_FAR),
-                         0.0f, 1.0f);
-        zVoxel = Z_MIN + t * (Z_MAX - Z_MIN);
-    }
-
-    // One-euro-lite: simple low-pass on Z.
-    smoothedZ_ += (zVoxel - smoothedZ_) * 0.25f;
-
+    // Camera X → voxel X, camera Y → voxel Z (horizontal plane); Y fixed at midpoint
     curX_ = clampf(hand.lm_x[8] * (float)VOXEL_W, X_MIN, X_MAX);
-    curY_ = clampf(hand.lm_y[8] * (float)VOXEL_H, Y_MIN, Y_MAX);
-    curZ_ = clampf(smoothedZ_, Z_MIN, Z_MAX);
+    curY_ = 0.5f * (Y_MIN + Y_MAX);
+    curZ_ = clampf(hand.lm_y[8] * (float)VOXEL_D, Z_MIN, Z_MAX);
     pushOutsideCoreRadius(curX_, curZ_);
     cursorValid_ = true;
 }
