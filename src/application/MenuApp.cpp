@@ -17,8 +17,8 @@
 // Tunables
 // -----------------------------------------------------------------------
 static constexpr int   THUMBS_UP_LAUNCH_FRAMES = 20;   // ~0.5s at 40fps
-static constexpr float SMOOTHING    = 0.18f;
-static constexpr float ANGULAR_GAIN = 0.09f;
+static constexpr float SMOOTHING    = 0.35f;
+static constexpr float ANGULAR_GAIN = 0.40f;
 static constexpr float ANGULAR_DECAY = 0.90f;
 static constexpr float CAROUSEL_RADIUS = 0.70f;   // model-space radius
 static constexpr float ICON_SIZE_BASE  = 0.18f;   // model-space icon scale
@@ -143,12 +143,14 @@ void MenuApp::update(const SharedHandData& hand)
 
     Gesture g = detectGesture(hand);
 
-    // PEACE direction → angular velocity.
-    if (g == Gesture::PEACE) {
+    // POINT (index finger extended) direction → angular velocity.
+    if (g == Gesture::POINT) {
         float dirX = hand.lm_x[8] - hand.lm_x[5];
         dirX = clampf(dirX, -0.5f, 0.5f);
         float target = dirX * 2.0f * ANGULAR_GAIN;
         angularVel_ += (target - angularVel_) * SMOOTHING;
+        fprintf(stderr, "carousel: gesture=POINT dirX=%.3f target=%.4f vel=%.4f angle=%.3f sel=%d\n",
+                dirX, target, angularVel_, carouselAngle_, selectedIndex());
     } else {
         angularVel_ *= ANGULAR_DECAY;
 
@@ -283,7 +285,7 @@ void MenuApp::draw(Renderer& renderer)
     int N = (int)entries_.size();
     int sel = selectedIndex();
 
-    // Place each item on a circle in the XZ plane at y=0.
+    // Draw all icons first.
     for (int i = 0; i < N; ++i) {
         float a = 2.0f * (float)M_PI * i / N + carouselAngle_;
         float cx = CAROUSEL_RADIUS * sinf(a);
@@ -294,6 +296,49 @@ void MenuApp::draw(Renderer& renderer)
         float s = (i == sel) ? ICON_SIZE_HIGHLIGHT : ICON_SIZE_BASE;
 
         drawIcon(voxels, entries_[i].iconKind, cx, cy, cz, s, i == sel);
+    }
+
+    // Rising blue fill on selected icon: scan the selected icon's voxel
+    // bounding box and recolor any set voxels that fall in the bottom
+    // (progress * VOXEL_H) rows to blue. y=0 is top in this display,
+    // so "bottom" = high y indices; threshold sweeps downward as progress grows.
+    if (thumbsUpHeld_ > 0) {
+        float progress = thumbsUpHeld_ / (float)THUMBS_UP_LAUNCH_FRAMES;
+        if (progress > 1.0f) progress = 1.0f;
+        // threshold: voxels with y < threshold are in the "bottom" region
+        // (y=0 is now bottom of display after slicer Y-flip)
+        int threshold = (int)(progress * VOXEL_H);
+
+        float a   = 2.0f * (float)M_PI * sel / N + carouselAngle_;
+        float icx = CAROUSEL_RADIUS * sinf(a);
+        float icy = 0.08f;
+        float icz = CAROUSEL_RADIUS * cosf(a);
+        float s   = ICON_SIZE_HIGHLIGHT;
+
+        // Bounding box of the selected icon in voxel space.
+        int vxc = (int)roundf(icx * 0.5f * (VOXEL_W - 1) + (VOXEL_W - 1) * 0.5f);
+        int vyc = (int)roundf(icy * 0.5f * (VOXEL_H - 1) + (VOXEL_H - 1) * 0.5f);
+        int vzc = (int)roundf(icz * 0.5f * (VOXEL_D - 1) + (VOXEL_D - 1) * 0.5f);
+        int hvx = (int)ceilf(s * 0.5f * (VOXEL_W - 1));
+        int hvy = (int)ceilf(s * 0.5f * (VOXEL_H - 1));
+        int hvz = (int)ceilf(s * 0.5f * (VOXEL_D - 1));
+
+        int x0 = std::max(0,         vxc - hvx), x1 = std::min(VOXEL_W - 1, vxc + hvx);
+        int y0 = std::max(0,         vyc - hvy), y1 = std::min(threshold - 1, vyc + hvy);
+        int z0 = std::max(0,         vzc - hvz), z1 = std::min(VOXEL_D - 1, vzc + hvz);
+
+        for (int z = z0; z <= z1; ++z) {
+            for (int y = y0; y <= y1; ++y) {
+                for (int x = x0; x <= x1; ++x) {
+                    int idx = ((z * VOXEL_H + y) * VOXEL_W + x) * 4;
+                    if (voxels[idx + 3] != 0) {
+                        voxels[idx + 0] = 0;
+                        voxels[idx + 1] = 80;
+                        voxels[idx + 2] = 255;
+                    }
+                }
+            }
+        }
     }
 
     renderer.uploadVoxelBuffer(voxels);

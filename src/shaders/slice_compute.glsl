@@ -27,7 +27,7 @@ void main()
 
     float t     = float(coord.x) - 64.0;   // -64..+63
     float vox_x = (64.0 + PANEL_OFFSET * cosT - t * sinT) / 128.0;
-    float vox_y = float(coord.y) / 64.0;
+    float vox_y = 1.0 - float(coord.y) / 64.0;
     float vox_z = (64.0 + PANEL_OFFSET * sinT + t * cosT) / 128.0;
 
     // Blank the center cylinder — panels can never illuminate within PANEL_OFFSET of the spin axis

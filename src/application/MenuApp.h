@@ -11,10 +11,10 @@
 // file is absent, a default list (cube, torus, particles) is used.
 //
 // Interaction:
-//   PEACE (index+middle extended, horizontal direction) → spin carousel.
-//   THUMBS_UP (held ~0.5s)                               → launch
-//     the centered item. The launch target is exposed via
-//     requestedApp(); main.cpp performs the swap.
+//   POINT (index finger extended, horizontal direction) → spin carousel.
+//   THUMBS_UP (held ~0.5s) → launch the centered item; a blue floor rises
+//     from the bottom while held as a visual progress indicator. The launch
+//     target is exposed via requestedApp(); main.cpp performs the swap.
 //
 // For wireframe entries, requestedApp() returns "wireframe:<obj-path>"
 // so main.cpp can call WireframeApp::setModel() before setup().
