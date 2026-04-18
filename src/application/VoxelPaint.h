@@ -66,6 +66,19 @@ inline void paintCube(uint8_t* voxels, int cx, int cy, int cz, int half,
                 paintVoxel(voxels, cx + dx, cy + dy, cz + dz, r, g, b);
 }
 
+// Paint a filled sphere of given radius centered at (cx,cy,cz).
+inline void paintSphere(uint8_t* voxels, int cx, int cy, int cz, float radius,
+                        uint8_t r, uint8_t g, uint8_t b)
+{
+    int ir = (int)std::ceil(radius);
+    float r2 = radius * radius;
+    for (int dz = -ir; dz <= ir; ++dz)
+        for (int dy = -ir; dy <= ir; ++dy)
+            for (int dx = -ir; dx <= ir; ++dx)
+                if ((float)(dx*dx + dy*dy + dz*dz) <= r2)
+                    paintVoxel(voxels, cx + dx, cy + dy, cz + dz, r, g, b);
+}
+
 // Apply the combined rotation R = Rz * Ry * Rx (matching cube.py
 // conventions) to vector v, storing the result in out. This is the same
 // formula used by CubeApp::rotate and WireframeApp::rotate.

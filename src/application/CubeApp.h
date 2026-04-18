@@ -1,5 +1,6 @@
 #pragma once
 #include "IApplication.h"
+#include "../engine/CameraConfig.h"
 #include <cstdint>
 
 class CubeApp : public IApplication {
@@ -18,9 +19,14 @@ private:
     float rotX_   = 0.0f;
     float rotY_   = 0.0f;
     float rotZ_   = 0.0f;
-    float scale_  = 1.0f;   // clamped to ~16–32 px tall
-    float posX_   = 0.0f;   // voxel-space X offset, clamped to ±8
-    float posY_   = 0.0f;   // voxel-space Y offset, clamped to ±8
-    float posZ_   = 0.0f;   // smoothed toward core-safe target in update()
+    float scale_  = 1.0f;
+    float posX_   = 0.0f;   // voxel-space X offset from center
+    float posY_   = 0.0f;   // voxel-space Y offset from center
+    float posZ_   = 0.0f;   // voxel-space Z offset from center
+
+    // Camera config and depth estimation for Z
+    CameraConfig cam_;
+    bool         camOk_     = false;
+    float        smoothedZ_ = 64.0f;
 
 };

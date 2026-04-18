@@ -35,12 +35,13 @@ public:
         return menuWatcher_.shouldReturn() ? "menu" : nullptr;
     }
 
-    static constexpr int N_PARTICLES = 256;
+    static constexpr int N_PARTICLES = 8;
 
 private:
     struct Particle {
         float x, y, z;
         float vx, vy, vz;
+        float size;
         uint8_t r, g, b;
     };
 
