@@ -50,6 +50,11 @@ add_executable(hologram
     ${APP_SOURCES}
 )
 
+add_executable(calibrate
+    src/calibrate.cpp
+    ${ENGINE_SOURCES}
+)
+
 # --- Include directories ---
 target_include_directories(hologram PRIVATE
     ${CMAKE_SOURCE_DIR}          # for shared_defs.h
@@ -66,6 +71,20 @@ target_link_libraries(hologram PRIVATE
     rt          # for shm_open / shm_unlink
 )
 
+target_include_directories(calibrate PRIVATE
+    ${CMAKE_SOURCE_DIR}
+    ${OPENGL_INCLUDE_DIR}
+    ${epoxy_INCLUDE_DIRS}
+)
+
+target_link_libraries(calibrate PRIVATE
+    OpenGL::OpenGL
+    OpenGL::EGL
+    PkgConfig::epoxy
+    Threads::Threads
+    rt
+)
+
 # --- test_shm_reader: standalone shared-memory monitor (no GL deps) ---
 add_executable(test_shm_reader src/test_shm_reader.cpp)
 target_include_directories(test_shm_reader PRIVATE ${CMAKE_SOURCE_DIR})
@@ -76,6 +95,8 @@ configure_file(src/shaders/slice_compute.glsl
                ${CMAKE_BINARY_DIR}/shaders/slice_compute.glsl COPYONLY)
 configure_file(src/shaders/fluid_sim.glsl
                ${CMAKE_BINARY_DIR}/shaders/fluid_sim.glsl COPYONLY)
+configure_file(src/shaders/slice_compute_calibrate.glsl
+               ${CMAKE_BINARY_DIR}/shaders/slice_compute_calibrate.glsl COPYONLY)
 
 # Print build summary
 message(STATUS "OpenGL libraries : ${OPENGL_LIBRARIES}")

@@ -61,9 +61,33 @@ bool Slicer::loadComputeShader(const char* path)
     return true;
 }
 
+void Slicer::cacheUniformLocations()
+{
+    if (!computeProg_) return;
+    uPanelOffsetLoc_ = glGetUniformLocation(computeProg_, "uPanelOffset");
+    uOffsetSignLoc_ = glGetUniformLocation(computeProg_, "uOffsetSign");
+    uSweepDirLoc_ = glGetUniformLocation(computeProg_, "uSweepDirection");
+    uSwapSinCosLoc_ = glGetUniformLocation(computeProg_, "uSwapSinCos");
+    uPhaseOffsetLoc_ = glGetUniformLocation(computeProg_, "uPhaseOffset");
+}
+
+void Slicer::setCalibrationParams(float panelOffset,
+                                  float offsetSign,
+                                  float sweepDirection,
+                                  bool swapSinCos,
+                                  float phaseOffset)
+{
+    panelOffset_ = panelOffset;
+    offsetSign_ = offsetSign;
+    sweepDirection_ = sweepDirection;
+    swapSinCos_ = swapSinCos;
+    phaseOffset_ = phaseOffset;
+}
+
 bool Slicer::init(const char* shaderPath)
 {
     if (!loadComputeShader(shaderPath)) return false;
+    cacheUniformLocations();
 
     // Create 2D-array output image texture (128 x 64 x SLICE_COUNT, RGBA8)
     glGenTextures(1, &sliceOutTex_);
@@ -97,6 +121,12 @@ bool Slicer::init(const char* shaderPath)
 void Slicer::kickDispatch(GLuint voxelTexID)
 {
     glUseProgram(computeProg_);
+
+    if (uPanelOffsetLoc_ >= 0) glUniform1f(uPanelOffsetLoc_, panelOffset_);
+    if (uOffsetSignLoc_ >= 0) glUniform1f(uOffsetSignLoc_, offsetSign_);
+    if (uSweepDirLoc_ >= 0) glUniform1f(uSweepDirLoc_, sweepDirection_);
+    if (uSwapSinCosLoc_ >= 0) glUniform1i(uSwapSinCosLoc_, swapSinCos_ ? 1 : 0);
+    if (uPhaseOffsetLoc_ >= 0) glUniform1f(uPhaseOffsetLoc_, phaseOffset_);
 
     // Bind 3D voxel texture to sampler unit 0
     glActiveTexture(GL_TEXTURE0);
