@@ -11,7 +11,7 @@ layout(local_size_x = 64, local_size_y = 4, local_size_z = 1) in;
 // Physical gap between the two panels is 48 mm; for P2 (2 mm/px) that is
 // 12 px per side.  Each panel sweeps a chord offset by this amount from the
 // spin axis, not a diameter through the axis.
-#define PANEL_OFFSET 12.0
+#define PANEL_OFFSET -12.0
 #define MASK_RADIUS  (PANEL_OFFSET + 1.0)
 
 // 3D voxel grid sampler — 128(X) × 64(Y) × 128(Z), RGBA8

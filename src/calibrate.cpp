@@ -34,7 +34,7 @@ static void buildCalibrationCube(uint8_t* voxels, size_t bytes)
     memset(voxels, 0, bytes);
 
     static constexpr int kCubeSide = 8;
-    static constexpr int kMargin = 1;
+    static constexpr int kMargin = 32;
     const int startX = VOXEL_W - kCubeSide - kMargin;
     const int startY = VOXEL_H - kCubeSide - kMargin;
     const int startZ = VOXEL_D - kCubeSide - kMargin;
