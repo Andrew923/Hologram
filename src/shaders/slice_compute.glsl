@@ -26,19 +26,26 @@ void main()
     float sinT  = sin(theta);
 
     float t     = float(coord.x) - 64.0;   // -64..+63
-    float vox_x = (64.0 + PANEL_OFFSET * cosT - t * sinT) / 128.0;
-    float vox_y = 1.0 - float(coord.y) / 64.0;
-    float vox_z = (64.0 + PANEL_OFFSET * sinT + t * cosT) / 128.0;
+    float vox_x = 64.0 + PANEL_OFFSET * cosT - t * sinT;
+    float vox_y = 63.0 - float(coord.y);
+    float vox_z = 64.0 + PANEL_OFFSET * sinT + t * cosT;
 
     // Blank the center cylinder — panels can never illuminate within PANEL_OFFSET of the spin axis
-    float cx = vox_x * 128.0 - 64.0;
-    float cz = vox_z * 128.0 - 64.0;
+    float cx = vox_x - 64.0;
+    float cz = vox_z - 64.0;
     if (cx * cx + cz * cz < MASK_RADIUS * MASK_RADIUS) {
         imageStore(uSliceOut, ivec3(coord, sliceIndex), vec4(0.0));
         return;
     }
 
+    int ix = int(floor(vox_x + 0.5));
+    int iy = int(floor(vox_y + 0.5));
+    int iz = int(floor(vox_z + 0.5));
+    if (ix < 0 || ix >= 128 || iy < 0 || iy >= 64 || iz < 0 || iz >= 128) {
+        imageStore(uSliceOut, ivec3(coord, sliceIndex), vec4(0.0));
+        return;
+    }
 
-    vec4 color = texture(uVoxelGrid, vec3(vox_x, vox_y, vox_z));
+    vec4 color = texelFetch(uVoxelGrid, ivec3(ix, iy, iz), 0);
     imageStore(uSliceOut, ivec3(coord, sliceIndex), color);
 }

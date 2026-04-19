@@ -121,5 +121,6 @@ void HandApp::draw(Renderer& renderer)
         }
     }
 
+    menuWatcher_.drawLoadingIndicator(voxels);
     renderer.uploadVoxelBuffer(voxels);
 }

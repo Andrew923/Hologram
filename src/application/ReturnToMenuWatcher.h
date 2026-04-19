@@ -24,8 +24,8 @@
 
 class ReturnToMenuWatcher {
 public:
-    // ~500ms at ~40fps.
-    static constexpr int HOLD_FRAMES = 20;
+    // Match menu launch hold time so entering/leaving app feels symmetric.
+    static constexpr int HOLD_FRAMES = 60;
     // After triggering, ignore gestures until the user goes through
     // any non-THUMBS_UP state (prevents accidental double-trigger).
     static constexpr int COOLDOWN_FRAMES = 60;
@@ -57,6 +57,61 @@ public:
     }
 
     bool shouldReturn() const { return triggered_; }
+
+    float progress01() const {
+        float p = (float)heldFrames_ / (float)HOLD_FRAMES;
+        if (p < 0.0f) p = 0.0f;
+        if (p > 1.0f) p = 1.0f;
+        return p;
+    }
+
+    bool isLoading() const { return heldFrames_ > 0 && !triggered_; }
+
+    void drawLoadingIndicator(uint8_t* voxels) const {
+        if (!isLoading()) return;
+
+        constexpr int SIZE = 9;
+        const int ox = VOXEL_W - SIZE - 3;
+        const int oy = 2;
+        const int oz = VOXEL_D - SIZE - 3;
+
+        auto paint = [&](int x, int y, int z, uint8_t r, uint8_t g, uint8_t b) {
+            if (x < 0 || x >= VOXEL_W || y < 0 || y >= VOXEL_H || z < 0 || z >= VOXEL_D) return;
+            int idx = ((z * VOXEL_H + y) * VOXEL_W + x) * 4;
+            voxels[idx + 0] = r;
+            voxels[idx + 1] = g;
+            voxels[idx + 2] = b;
+            voxels[idx + 3] = 255;
+        };
+
+        for (int i = 0; i < SIZE; ++i) {
+            paint(ox + i, oy,         oz,  40, 120, 200);
+            paint(ox + i, oy,         oz + SIZE - 1, 40, 120, 200);
+            paint(ox,     oy,         oz + i, 40, 120, 200);
+            paint(ox + SIZE - 1, oy,  oz + i, 40, 120, 200);
+        }
+
+        int fill = (int)(progress01() * (SIZE - 2) + 0.5f);
+        for (int z = 0; z < fill; ++z) {
+            for (int x = 0; x < SIZE - 2; ++x) {
+                paint(ox + 1 + x, oy, oz + 1 + z, 0, 180, 255);
+            }
+        }
+
+        int perimeter = 4 * (SIZE - 1);
+        int step = (heldFrames_ / 2) % perimeter;
+        int sx = 0, sz = 0;
+        if (step < (SIZE - 1)) {
+            sx = step; sz = 0;
+        } else if (step < 2 * (SIZE - 1)) {
+            sx = SIZE - 1; sz = step - (SIZE - 1);
+        } else if (step < 3 * (SIZE - 1)) {
+            sx = (SIZE - 1) - (step - 2 * (SIZE - 1)); sz = SIZE - 1;
+        } else {
+            sx = 0; sz = (SIZE - 1) - (step - 3 * (SIZE - 1));
+        }
+        paint(ox + sx, oy, oz + sz, 255, 255, 255);
+    }
 
     // Called by the app right before yielding; resets the flag so a
     // subsequent re-enter doesn't immediately re-trigger.
