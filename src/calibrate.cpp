@@ -86,7 +86,7 @@ int main(int argc, char* argv[])
     int c;
     while ((c = getopt_long(argc, argv, "i:p:o:s:d:wf:u:h", longopts, nullptr)) != -1) {
         switch (c) {
-            case 'i': strncpy(targetIP, optarg, sizeof(targetIP) - 1); break;
+            case 'i': snprintf(targetIP, sizeof(targetIP), "%s", optarg); break;
             case 'p': targetPort = (uint16_t)atoi(optarg); break;
             case 'o': panelOffset = strtof(optarg, nullptr); break;
             case 's': offsetSign = strtof(optarg, nullptr); break;
