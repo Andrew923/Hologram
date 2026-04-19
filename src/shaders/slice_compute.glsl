@@ -2,6 +2,11 @@
 layout(local_size_x = 64, local_size_y = 4, local_size_z = 1) in;
 
 #define SLICE_COUNT  240
+#define SLICE_W      128.0
+#define SLICE_H      64.0
+#define VOXEL_W      128.0
+#define VOXEL_H      64.0
+#define VOXEL_D      128.0
 #define M_PI         3.14159265358979323846
 // Physical gap between the two panels is 48 mm; for P2 (2 mm/px) that is
 // 12 px per side.  Each panel sweeps a chord offset by this amount from the
@@ -25,26 +30,33 @@ void main()
     float cosT  = cos(theta);
     float sinT  = sin(theta);
 
-    float t     = float(coord.x) - 64.0;   // -64..+63
-    float vox_x = 64.0 + PANEL_OFFSET * cosT - t * sinT;
-    float vox_y = 63.0 - float(coord.y);
-    float vox_z = 64.0 + PANEL_OFFSET * sinT + t * cosT;
+    // Use texel-center coordinates: texel i center is at i + 0.5.
+    float sliceX = float(coord.x) + 0.5;
+    float sliceY = float(coord.y) + 0.5;
+
+    float t     = sliceX - 0.5 * SLICE_W;  // -63.5..+63.5
+    float vox_x = 0.5 * VOXEL_W + PANEL_OFFSET * cosT - t * sinT;
+    float vox_y = VOXEL_H - sliceY;
+    float vox_z = 0.5 * VOXEL_D + PANEL_OFFSET * sinT + t * cosT;
 
     // Blank the center cylinder — panels can never illuminate within PANEL_OFFSET of the spin axis
-    float cx = vox_x - 64.0;
-    float cz = vox_z - 64.0;
+    float cx = vox_x - 0.5 * VOXEL_W;
+    float cz = vox_z - 0.5 * VOXEL_D;
     if (cx * cx + cz * cz < MASK_RADIUS * MASK_RADIUS) {
         imageStore(uSliceOut, ivec3(coord, sliceIndex), vec4(0.0));
         return;
     }
 
-    int ix = int(round(vox_x));
-    int iy = int(round(vox_y));
-    int iz = int(round(vox_z));
-    if (ix < 0 || ix >= 128 || iy < 0 || iy >= 64 || iz < 0 || iz >= 128) {
+    if (vox_x < 0.5 || vox_x > (VOXEL_W - 0.5) ||
+        vox_y < 0.5 || vox_y > (VOXEL_H - 0.5) ||
+        vox_z < 0.5 || vox_z > (VOXEL_D - 0.5)) {
         imageStore(uSliceOut, ivec3(coord, sliceIndex), vec4(0.0));
         return;
     }
+
+    int ix = int(floor(vox_x));
+    int iy = int(floor(vox_y));
+    int iz = int(floor(vox_z));
 
     vec4 color = texelFetch(uVoxelGrid, ivec3(ix, iy, iz), 0);
     imageStore(uSliceOut, ivec3(coord, sliceIndex), color);
