@@ -111,5 +111,6 @@ void CubeApp::draw(Renderer& renderer)
                     R, G, B);
     }
 
+    menuWatcher_.drawLoadingIndicator(voxels);
     renderer.uploadVoxelBuffer(voxels);
 }

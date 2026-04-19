@@ -221,5 +221,6 @@ void ParticleApp::draw(Renderer& renderer)
                             255, 0, 0);
     }
 
+    menuWatcher_.drawLoadingIndicator(voxels);
     renderer.uploadVoxelBuffer(voxels);
 }
