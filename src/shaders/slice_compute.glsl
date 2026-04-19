@@ -38,9 +38,9 @@ void main()
         return;
     }
 
-    int ix = int(floor(vox_x + 0.5));
-    int iy = int(floor(vox_y + 0.5));
-    int iz = int(floor(vox_z + 0.5));
+    int ix = int(round(vox_x));
+    int iy = int(round(vox_y));
+    int iz = int(round(vox_z));
     if (ix < 0 || ix >= 128 || iy < 0 || iy >= 64 || iz < 0 || iz >= 128) {
         imageStore(uSliceOut, ivec3(coord, sliceIndex), vec4(0.0));
         return;
