@@ -21,6 +21,7 @@
 // held gesture.
 // -----------------------------------------------------------------------
 #include "GestureDetector.h"
+#include "VoxelPaint.h"
 
 class ReturnToMenuWatcher {
 public:
@@ -71,30 +72,22 @@ public:
         if (!isLoading()) return;
 
         constexpr int SIZE = 9;
+        constexpr int FILL_AREA_SIZE = SIZE - 2;  // interior size excluding border
         const int ox = VOXEL_W - SIZE - 3;
         const int oy = 2;
         const int oz = VOXEL_D - SIZE - 3;
 
-        auto paint = [&](int x, int y, int z, uint8_t r, uint8_t g, uint8_t b) {
-            if (x < 0 || x >= VOXEL_W || y < 0 || y >= VOXEL_H || z < 0 || z >= VOXEL_D) return;
-            int idx = ((z * VOXEL_H + y) * VOXEL_W + x) * 4;
-            voxels[idx + 0] = r;
-            voxels[idx + 1] = g;
-            voxels[idx + 2] = b;
-            voxels[idx + 3] = 255;
-        };
-
         for (int i = 0; i < SIZE; ++i) {
-            paint(ox + i, oy,         oz,  40, 120, 200);
-            paint(ox + i, oy,         oz + SIZE - 1, 40, 120, 200);
-            paint(ox,     oy,         oz + i, 40, 120, 200);
-            paint(ox + SIZE - 1, oy,  oz + i, 40, 120, 200);
+            voxpaint::paintVoxel(voxels, ox + i, oy, oz, 40, 120, 200);
+            voxpaint::paintVoxel(voxels, ox + i, oy, oz + SIZE - 1, 40, 120, 200);
+            voxpaint::paintVoxel(voxels, ox, oy, oz + i, 40, 120, 200);
+            voxpaint::paintVoxel(voxels, ox + SIZE - 1, oy, oz + i, 40, 120, 200);
         }
 
-        int fill = (int)(progress01() * (SIZE - 2) + 0.5f);
+        int fill = (int)(progress01() * FILL_AREA_SIZE + 0.5f);
         for (int z = 0; z < fill; ++z) {
-            for (int x = 0; x < SIZE - 2; ++x) {
-                paint(ox + 1 + x, oy, oz + 1 + z, 0, 180, 255);
+            for (int x = 0; x < FILL_AREA_SIZE; ++x) {
+                voxpaint::paintVoxel(voxels, ox + 1 + x, oy, oz + 1 + z, 0, 180, 255);
             }
         }
 
@@ -110,7 +103,7 @@ public:
         } else {
             sx = 0; sz = (SIZE - 1) - (step - 3 * (SIZE - 1));
         }
-        paint(ox + sx, oy, oz + sz, 255, 255, 255);
+        voxpaint::paintVoxel(voxels, ox + sx, oy, oz + sz, 255, 255, 255);
     }
 
     // Called by the app right before yielding; resets the flag so a
