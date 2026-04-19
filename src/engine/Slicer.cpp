@@ -69,6 +69,17 @@ void Slicer::cacheUniformLocations()
     uSweepDirLoc_ = glGetUniformLocation(computeProg_, "uSweepDirection");
     uSwapSinCosLoc_ = glGetUniformLocation(computeProg_, "uSwapSinCos");
     uPhaseOffsetLoc_ = glGetUniformLocation(computeProg_, "uPhaseOffset");
+
+    const int found = (uPanelOffsetLoc_ >= 0) + (uOffsetSignLoc_ >= 0) +
+                      (uSweepDirLoc_ >= 0) + (uSwapSinCosLoc_ >= 0) +
+                      (uPhaseOffsetLoc_ >= 0);
+    if (found > 0 && found < 5) {
+        fprintf(stderr,
+                "Slicer: partial calibration uniform set detected "
+                "(panel=%d, sign=%d, sweep=%d, swap=%d, phase=%d)\n",
+                uPanelOffsetLoc_, uOffsetSignLoc_, uSweepDirLoc_,
+                uSwapSinCosLoc_, uPhaseOffsetLoc_);
+    }
 }
 
 void Slicer::setCalibrationParams(float panelOffset,

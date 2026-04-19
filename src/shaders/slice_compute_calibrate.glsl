@@ -8,6 +8,7 @@ layout(local_size_x = 64, local_size_y = 4, local_size_z = 1) in;
 #define VOXEL_H      64.0
 #define VOXEL_D      128.0
 #define M_PI         3.14159265358979323846
+// Keep an extra 1 voxel safety ring around the axis to avoid bleed artifacts.
 #define MASK_RADIUS_BIAS 1.0
 
 layout(binding = 0) uniform sampler3D uVoxelGrid;
@@ -63,7 +64,7 @@ void main()
         return;
     }
 
-    ivec3 src = ivec3(int(floor(vox_x)), int(floor(vox_y)), int(floor(vox_z)));
+    ivec3 src = ivec3(vox_x, vox_y, vox_z);
     vec4 color = texelFetch(uVoxelGrid, src, 0);
     imageStore(uSliceOut, ivec3(coord, sliceIndex), color);
 }

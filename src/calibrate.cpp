@@ -99,8 +99,14 @@ int main(int argc, char* argv[])
         }
     }
 
-    if (offsetSign == 0.0f) offsetSign = 1.0f;
-    if (sweepDir == 0.0f) sweepDir = 1.0f;
+    if (offsetSign == 0.0f) {
+        fprintf(stderr, "calibrate: --offset-sign 0 is invalid, using 1\n");
+        offsetSign = 1.0f;
+    }
+    if (sweepDir == 0.0f) {
+        fprintf(stderr, "calibrate: --sweep-dir 0 is invalid, using 1\n");
+        sweepDir = 1.0f;
+    }
     if (sleepUs < 0) sleepUs = 0;
 
     fprintf(stderr,
