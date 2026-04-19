@@ -107,7 +107,10 @@ int main(int argc, char* argv[])
         fprintf(stderr, "calibrate: --sweep-dir 0 is invalid, using 1\n");
         sweepDir = 1.0f;
     }
-    if (sleepUs < 0) sleepUs = 0;
+    if (sleepUs < 0) {
+        fprintf(stderr, "calibrate: --sleep-us cannot be negative, using 0\n");
+        sleepUs = 0;
+    }
 
     fprintf(stderr,
             "calibrate: ip=%s port=%u panelOffset=%.3f offsetSign=%.3f "
