@@ -38,6 +38,7 @@ void main()
         return;
     }
 
+
     vec4 color = texture(uVoxelGrid, vec3(vox_x, vox_y, vox_z));
     imageStore(uSliceOut, ivec3(coord, sliceIndex), color);
 }
