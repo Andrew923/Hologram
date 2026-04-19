@@ -114,15 +114,16 @@ void TorusKnotApp::draw(Renderer& renderer)
         vz = std::max(0, std::min(VOXEL_D - 1, vz));
 
         if (havePrev) {
-            const uint8_t* c = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
+            const uint8_t* knotColor = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
             voxpaint::paint3DLine(voxels, prevX, prevY, prevZ, vx, vy, vz,
-                                  c[0], c[1], c[2]);
+                                  knotColor[0], knotColor[1], knotColor[2]);
         }
 
-        const uint8_t* c = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
+        const uint8_t* knotColor = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
         float tubeR = TUBE_RADIUS_BASE_PX
                     + TUBE_RADIUS_WOBBLE_PX * (0.5f + 0.5f * sinf(phase_ + 3.0f * t));
-        voxpaint::paintSphere(voxels, vx, vy, vz, tubeR, c[0], c[1], c[2]);
+        voxpaint::paintSphere(voxels, vx, vy, vz, tubeR,
+                              knotColor[0], knotColor[1], knotColor[2]);
 
         prevX = vx; prevY = vy; prevZ = vz;
         havePrev = true;
