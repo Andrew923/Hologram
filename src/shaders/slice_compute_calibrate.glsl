@@ -23,7 +23,7 @@ void main()
 {
     ivec2 coord      = ivec2(gl_GlobalInvocationID.xy);
     int   sliceIndex = int(gl_GlobalInvocationID.z);
-    if (coord.x >= 128 || coord.y >= 64) return;
+    if (coord.x >= int(SLICE_W) || coord.y >= int(SLICE_H)) return;
 
     float theta = (float(sliceIndex) * (2.0 * M_PI / float(SLICE_COUNT))) * uSweepDirection
                 + uPhaseOffset;
