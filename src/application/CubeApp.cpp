@@ -42,7 +42,10 @@ static constexpr float SCALE_MAX = SCALE_MAX_PX / (VOXEL_H - 1);
 // -----------------------------------------------------------------------
 // IApplication interface
 // -----------------------------------------------------------------------
-void CubeApp::setup(Renderer& /*renderer*/) {}
+void CubeApp::setup(Renderer& /*renderer*/)
+{
+    menuWatcher_.acknowledge();
+}
 
 void CubeApp::update(const SharedHandData& hand)
 {

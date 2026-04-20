@@ -46,6 +46,8 @@ static std::string getHologramRoot()
 #include "application/TorusKnotApp.h"
 #include "application/ParticleApp.h"
 #include "application/MenuApp.h"
+#include "application/CorridorApp.h"
+#include "application/CityApp.h"
 
 #include <string>
 
@@ -226,6 +228,8 @@ int main(int argc, char* argv[])
     TorusKnotApp torusApp;
     ParticleApp  particleApp;
     MenuApp      menuApp;
+    CorridorApp  corridorApp;
+    CityApp      cityApp;
 
     // If --obj was given on the CLI, pre-load the wireframe model.
     if (objPath[0] != '\0') wireframeApp.setModel(objPath);
@@ -245,6 +249,8 @@ int main(int argc, char* argv[])
             wireframeApp.setModel(name.substr(10));
             return &wireframeApp;
         }
+        if (name == "corridor")  return &corridorApp;
+        if (name == "city")      return &cityApp;
         return nullptr;
     };
 

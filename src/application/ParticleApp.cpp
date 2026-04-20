@@ -93,6 +93,7 @@ void ParticleApp::resetParticles()
 
 void ParticleApp::setup(Renderer& /*renderer*/)
 {
+    menuWatcher_.acknowledge();
     srand(12345);  // deterministic starting layout
     resetParticles();
 }

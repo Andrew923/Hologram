@@ -43,7 +43,10 @@ static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
 }
 
-void TorusKnotApp::setup(Renderer& /*renderer*/) {}
+void TorusKnotApp::setup(Renderer& /*renderer*/)
+{
+    menuWatcher_.acknowledge();
+}
 
 void TorusKnotApp::update(const SharedHandData& hand)
 {

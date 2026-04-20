@@ -42,6 +42,8 @@ set(APP_SOURCES
     src/application/TorusKnotApp.cpp
     src/application/ParticleApp.cpp
     src/application/MenuApp.cpp
+    src/application/CorridorApp.cpp
+    src/application/CityApp.cpp
 )
 
 add_executable(hologram
