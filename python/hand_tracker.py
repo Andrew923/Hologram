@@ -113,8 +113,15 @@ def main():
     consecutive_failures = 0
     reconnect_attempts = 0
 
+    TIMING_INTERVAL = 60
+    _t_counts = 0
+    _t_capture = _t_preprocess = _t_infer = _t_write = 0.0
+
     while _running:
+        t0 = time.monotonic()
         ret, frame = cap.read()
+        t1 = time.monotonic()
+
         if not ret or frame is None:
             consecutive_failures += 1
             if consecutive_failures >= 10:
@@ -140,7 +147,10 @@ def main():
 
         # MediaPipe requires RGB
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        t2 = time.monotonic()
+
         results = hands.process(rgb)
+        t3 = time.monotonic()
 
         t = time.monotonic()
 
@@ -152,6 +162,27 @@ def main():
             writer.write(lm_x, lm_y, hand_detected=True, timestamp=t)
         else:
             writer.write(zero_lm, zero_lm, hand_detected=False, timestamp=t)
+        t4 = time.monotonic()
+
+        _t_capture    += t1 - t0
+        _t_preprocess += t2 - t1
+        _t_infer      += t3 - t2
+        _t_write      += t4 - t3
+        _t_counts     += 1
+
+        if _t_counts >= TIMING_INTERVAL:
+            n = _t_counts
+            print(
+                f"[timing/{n}f] "
+                f"capture={_t_capture/n*1000:.1f}ms  "
+                f"preproc={_t_preprocess/n*1000:.2f}ms  "
+                f"infer={_t_infer/n*1000:.1f}ms  "
+                f"write={_t_write/n*1000:.3f}ms  "
+                f"total={(_t_capture+_t_preprocess+_t_infer+_t_write)/n*1000:.1f}ms",
+                flush=True,
+            )
+            _t_counts = 0
+            _t_capture = _t_preprocess = _t_infer = _t_write = 0.0
 
     # 4. Clean shutdown
     hands.close()

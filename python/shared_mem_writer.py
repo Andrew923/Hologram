@@ -64,14 +64,12 @@ class SharedMemWriter:
           1. Increment seq to odd  → signal write in progress
           2. Write payload
           3. Increment seq to even → signal ready
-        Each mmap.flush() = msync(MS_SYNC) = full memory barrier on aarch64.
         """
         mm = self._mm
 
         # --- Begin write: set seq to odd ---
         self._seq += 1
         struct.pack_into('<I', mm, OFFSET_SEQ, self._seq)
-        mm.flush()   # memory barrier before payload
 
         # --- Write payload ---
         struct.pack_into('<B',   mm, OFFSET_HAND_DETECTED, 1 if hand_detected else 0)
@@ -79,12 +77,9 @@ class SharedMemWriter:
         struct.pack_into('<21f', mm, OFFSET_LM_Y, *lm_y)
         struct.pack_into('<d',   mm, OFFSET_TIMESTAMP, timestamp)
 
-        mm.flush()   # barrier before seq even
-
         # --- End write: set seq to even ---
         self._seq += 1
         struct.pack_into('<I', mm, OFFSET_SEQ, self._seq)
-        mm.flush()   # final barrier
 
     def close(self):
         if self._mm is not None:
