@@ -56,9 +56,7 @@ bool WireframeApp::setModel(const std::string& objPath)
 // -----------------------------------------------------------------------
 void WireframeApp::setup(Renderer& /*renderer*/)
 {
-    // If setModel() was called before setup() and the mesh is not yet
-    // loaded, load it. (setModel() loads eagerly, so this is typically
-    // a no-op.)
+    menuWatcher_.acknowledge();
     if (!objPath_.empty() && mesh_.vertices.empty()) {
         if (!loadObj(objPath_, mesh_)) {
             fprintf(stderr, "WireframeApp: failed to load mesh '%s'\n",

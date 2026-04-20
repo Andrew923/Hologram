@@ -42,6 +42,8 @@ int MenuApp::iconKindForId(const std::string& id) const
     if (id == "torus")     return 1;
     if (id == "particles") return 2;
     if (id == "wireframe") return 3;
+    if (id == "corridor")  return 4;
+    if (id == "city")      return 5;
     return 0;
 }
 
@@ -185,15 +187,18 @@ void MenuApp::update(const SharedHandData& hand)
 void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
                        float s, bool highlighted) const
 {
-    // Color tables
-    static const uint8_t icon_colors[4][3] = {
-        {  0, 255, 255},  // cube: cyan
-        {255,  60, 200},  // torus knot: magenta-ish
-        {255, 180,  40},  // dots: amber
-        { 80, 255, 120},  // tetra: mint
+    // Color tables (indexed by kind)
+    static const uint8_t icon_colors[6][3] = {
+        {  0, 255, 255},  // 0 cube: cyan
+        {255,  60, 200},  // 1 torus knot: magenta-ish
+        {255, 180,  40},  // 2 dots: amber
+        { 80, 255, 120},  // 3 tetra: mint
+        {  0, 220, 180},  // 4 corridor: teal
+        {255, 160,  30},  // 5 city: orange-gold
     };
     static const uint8_t highlight[3] = {255, 255, 255};
-    const uint8_t* rgb = highlighted ? highlight : icon_colors[kind & 3];
+    int colorIdx = (kind < 6) ? kind : 0;
+    const uint8_t* rgb = highlighted ? highlight : icon_colors[colorIdx];
 
     auto mapToVoxel = [&](float mx, float my, float mz,
                           int& vx, int& vy, int& vz) {
@@ -257,7 +262,7 @@ void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
             mapToVoxel(pts[i][0], pts[i][1], pts[i][2], vx, vy, vz);
             voxpaint::paintCube(voxels, vx, vy, vz, 0, rgb[0], rgb[1], rgb[2]);
         }
-    } else {
+    } else if (kind == 3) {
         // Tetrahedron
         static const float v[4][3] = {
             { 0.0f,  1.0f,  0.0f},
@@ -272,6 +277,56 @@ void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
             voxpaint::paint3DLine(voxels, px[e[i][0]], py[e[i][0]], pz[e[i][0]],
                                          px[e[i][1]], py[e[i][1]], pz[e[i][1]],
                                          rgb[0], rgb[1], rgb[2]);
+    } else if (kind == 4) {
+        // Corridor: open-top U-shape with a slight curve suggesting a winding hallway
+        // Two vertical wall pillars connected by a floor line; bent path on the floor
+        static const float wallL[2][3] = {{-0.7f, -1.0f, -0.5f}, {-0.7f,  0.7f, -0.5f}};
+        static const float wallR[2][3] = {{ 0.7f, -1.0f, -0.5f}, { 0.7f,  0.7f, -0.5f}};
+        static const float floorPts[3][3] = {
+            {-0.7f, -1.0f, -0.5f},
+            {  0.0f, -1.0f,  0.0f},  // midpoint offset to suggest curve
+            { 0.7f, -1.0f,  0.5f},
+        };
+        int ax, ay, az, bx, by_, bz;
+        mapToVoxel(wallL[0][0], wallL[0][1], wallL[0][2], ax, ay, az);
+        mapToVoxel(wallL[1][0], wallL[1][1], wallL[1][2], bx, by_, bz);
+        voxpaint::paint3DLine(voxels, ax, ay, az, bx, by_, bz, rgb[0], rgb[1], rgb[2]);
+        mapToVoxel(wallR[0][0], wallR[0][1], wallR[0][2], ax, ay, az);
+        mapToVoxel(wallR[1][0], wallR[1][1], wallR[1][2], bx, by_, bz);
+        voxpaint::paint3DLine(voxels, ax, ay, az, bx, by_, bz, rgb[0], rgb[1], rgb[2]);
+        // Floor segments (two-part bent line)
+        int fpx[3], fpy[3], fpz[3];
+        for (int i = 0; i < 3; ++i) mapToVoxel(floorPts[i][0], floorPts[i][1], floorPts[i][2], fpx[i], fpy[i], fpz[i]);
+        voxpaint::paint3DLine(voxels, fpx[0], fpy[0], fpz[0], fpx[1], fpy[1], fpz[1], rgb[0], rgb[1], rgb[2]);
+        voxpaint::paint3DLine(voxels, fpx[1], fpy[1], fpz[1], fpx[2], fpy[2], fpz[2], rgb[0], rgb[1], rgb[2]);
+    } else if (kind == 5) {
+        // City: three buildings of different heights side by side
+        static const float buildings[3][4] = {
+            // {x_center, z_center, half_w, height}  (model space)
+            {-0.65f,  0.0f, 0.20f,  0.5f},   // left: medium height
+            { 0.00f,  0.0f, 0.22f,  1.0f},   // center: tall
+            { 0.65f,  0.0f, 0.18f,  0.3f},   // right: short
+        };
+        for (int b = 0; b < 3; ++b) {
+            float bcx = buildings[b][0], bcz = buildings[b][1];
+            float bhw = buildings[b][2], bh  = buildings[b][3];
+            float x0m = bcx - bhw, x1m = bcx + bhw;
+            float z0m = bcz - 0.18f, z1m = bcz + 0.18f;
+            float yBot = -1.0f, yTop = -1.0f + bh * 2.0f;
+            int px0, py0, pz0, px1, py1, pz1;
+            mapToVoxel(x0m, yBot, z0m, px0, py0, pz0);
+            mapToVoxel(x1m, yTop, z1m, px1, py1, pz1);
+            // Four vertical pillars
+            voxpaint::paint3DLine(voxels, px0, py0, pz0, px0, py1, pz0, rgb[0], rgb[1], rgb[2]);
+            voxpaint::paint3DLine(voxels, px1, py0, pz0, px1, py1, pz0, rgb[0], rgb[1], rgb[2]);
+            voxpaint::paint3DLine(voxels, px1, py0, pz1, px1, py1, pz1, rgb[0], rgb[1], rgb[2]);
+            voxpaint::paint3DLine(voxels, px0, py0, pz1, px0, py1, pz1, rgb[0], rgb[1], rgb[2]);
+            // Top edges
+            voxpaint::paint3DLine(voxels, px0, py1, pz0, px1, py1, pz0, rgb[0], rgb[1], rgb[2]);
+            voxpaint::paint3DLine(voxels, px1, py1, pz0, px1, py1, pz1, rgb[0], rgb[1], rgb[2]);
+            voxpaint::paint3DLine(voxels, px1, py1, pz1, px0, py1, pz1, rgb[0], rgb[1], rgb[2]);
+            voxpaint::paint3DLine(voxels, px0, py1, pz1, px0, py1, pz0, rgb[0], rgb[1], rgb[2]);
+        }
     }
 }
 

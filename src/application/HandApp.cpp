@@ -37,6 +37,7 @@ static constexpr int IY = 32;
 // -----------------------------------------------------------------------
 void HandApp::setup(Renderer& /*renderer*/)
 {
+    menuWatcher_.acknowledge();
     for (int i = 0; i < 21; ++i) {
         filtersX_[i] = OneEuroFilter(1.0f, 0.5f, 1.0f);
         filtersZ_[i] = OneEuroFilter(1.0f, 0.5f, 1.0f);
