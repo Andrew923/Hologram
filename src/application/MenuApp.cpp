@@ -17,13 +17,12 @@
 // Tunables
 // -----------------------------------------------------------------------
 static constexpr int   THUMBS_UP_LAUNCH_FRAMES = 60;   // ~1.5s at 40fps
-static constexpr float SMOOTHING    = 0.35f;
-static constexpr float ANGULAR_GAIN = 0.40f;
+static constexpr float SMOOTHING     = 0.35f;
+static constexpr float SPEED_SCALE   = 0.80f;  // angular velocity per unit finger offset
 static constexpr float ANGULAR_DECAY = 0.90f;
 static constexpr float CAROUSEL_RADIUS = 0.70f;   // model-space radius
 static constexpr float ICON_SIZE_BASE  = 0.18f;   // model-space icon scale
 static constexpr float ICON_SIZE_HIGHLIGHT = 0.28f;
-static constexpr float SNAP_STRENGTH = 0.07f;
 
 static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
@@ -143,29 +142,15 @@ void MenuApp::update(const SharedHandData& hand)
         return;
     }
 
-    Gesture g = detectGesture(hand);
-
-    // POINT (index finger extended) direction → angular velocity.
-    if (g == Gesture::POINT) {
-        float dirX = hand.lm_x[8] - hand.lm_x[5];
-        dirX = clampf(dirX, -0.5f, 0.5f);
-        float target = dirX * 2.0f * ANGULAR_GAIN;
-        angularVel_ += (target - angularVel_) * SMOOTHING;
-        fprintf(stderr, "carousel: gesture=POINT dirX=%.3f target=%.4f vel=%.4f angle=%.3f sel=%d\n",
-                dirX, target, angularVel_, carouselAngle_, selectedIndex());
-    } else {
-        angularVel_ *= ANGULAR_DECAY;
-
-        // Snap-to-slot when not actively spinning.
-        int N = (int)entries_.size();
-        float snapTarget = -2.0f * (float)M_PI * selectedIndex() / N;
-        float delta = wrapAngle(snapTarget - carouselAngle_);
-        angularVel_ += delta * SNAP_STRENGTH;
-    }
-
+    // Scroll: index finger tip X position drives angular velocity.
+    // Left of center (x < 0.5) = clockwise; right of center = counter-clockwise.
+    float offset = hand.lm_x[8] - 0.5f;
+    float target = -offset * SPEED_SCALE;
+    angularVel_ += (target - angularVel_) * SMOOTHING;
     carouselAngle_ += angularVel_;
 
     // THUMBS_UP held → launch selected.
+    Gesture g = detectGesture(hand);
     if (g == Gesture::THUMBS_UP) {
         thumbsUpHeld_++;
         if (thumbsUpHeld_ >= THUMBS_UP_LAUNCH_FRAMES) {

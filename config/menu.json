@@ -1,8 +1,6 @@
 {
     "entries": [
         { "id": "cube",      "label": "Cube" },
-        { "id": "hand",      "label": "Hand" },
-        { "id": "particles", "label": "Particles" },
         { "id": "wireframe", "label": "Cake",  "obj": "models/cake.obj" },
         { "id": "wireframe", "label": "House", "obj": "models/house.obj" },
         { "id": "wireframe", "label": "Tie",      "obj": "models/tie_f.obj" },
