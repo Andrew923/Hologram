@@ -195,16 +195,16 @@ void WireframeApp::draw(Renderer& renderer)
                 voxpaint::paintVoxel(voxels, x0, y0, z0,
                     mesh_.colors[a][0], mesh_.colors[a][1], mesh_.colors[a][2]);
             } else {
+                auto lerp8 = [](uint8_t ca, uint8_t cb, float tt) -> uint8_t {
+                    return static_cast<uint8_t>(
+                        roundf(static_cast<float>(ca) +
+                               tt * (static_cast<float>(cb) - static_cast<float>(ca))));
+                };
                 for (int i = 0; i <= dominant; ++i) {
                     float t  = (float)i / (float)dominant;
                     int   x  = (int)roundf(x0 + t * (x1 - x0));
                     int   y  = (int)roundf(y0 + t * (y1 - y0));
                     int   z  = (int)roundf(z0 + t * (z1 - z0));
-                    auto lerp8 = [](uint8_t ca, uint8_t cb, float tt) -> uint8_t {
-                        return static_cast<uint8_t>(
-                            roundf(static_cast<float>(ca) +
-                                   tt * (static_cast<float>(cb) - static_cast<float>(ca))));
-                    };
                     uint8_t r = lerp8(mesh_.colors[a][0], mesh_.colors[b][0], t);
                     uint8_t g = lerp8(mesh_.colors[a][1], mesh_.colors[b][1], t);
                     uint8_t bv = lerp8(mesh_.colors[a][2], mesh_.colors[b][2], t);
