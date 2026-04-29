@@ -78,7 +78,7 @@ void MenuApp::loadEntries(const std::string& path)
         entries_.push_back({"particles", "Particles", "",  2});
     }
 
-    // Optionally scan a directory for .obj files and append wireframe entries
+    // Optionally scan a directory for .obj / .glb files and append wireframe entries
     // for any not already explicitly listed.
     if (!scanDir.empty()) {
         std::error_code ec;
@@ -86,7 +86,11 @@ void MenuApp::loadEntries(const std::string& path)
             for (const auto& de : std::filesystem::directory_iterator(scanDir, ec)) {
                 if (!de.is_regular_file()) continue;
                 auto p = de.path();
-                if (p.extension() != ".obj") continue;
+                auto ext = p.extension().string();
+                // Lowercase the extension for case-insensitive comparison.
+                for (auto& ch : ext)
+                    ch = static_cast<char>(tolower(static_cast<unsigned char>(ch)));
+                if (ext != ".obj" && ext != ".glb") continue;
                 std::string rel = p.string();
                 bool already = false;
                 for (const auto& e : entries_) {

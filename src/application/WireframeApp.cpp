@@ -1,6 +1,7 @@
 #include "WireframeApp.h"
 #include "VoxelPaint.h"
 #include "../engine/Renderer.h"
+#include "../engine/GlbLoader.h"
 #include <cmath>
 #include <cstring>
 #include <algorithm>
@@ -20,6 +21,20 @@ static constexpr float SPIN_FRICTION = 0.995f;
 // Default auto-spin speed (rad/frame) when no gesture has been made yet
 static constexpr float DEFAULT_SPIN_Y = 0.02f;
 
+// Return true when the path ends with ".glb" (case-insensitive).
+static bool isGlbPath(const std::string& p)
+{
+    if (p.size() < 4) return false;
+    std::string ext = p.substr(p.size() - 4);
+    for (auto& ch : ext) ch = static_cast<char>(tolower(static_cast<unsigned char>(ch)));
+    return ext == ".glb";
+}
+
+static bool loadMesh(const std::string& path, ObjMesh& mesh)
+{
+    return isGlbPath(path) ? loadGlb(path, mesh) : loadObj(path, mesh);
+}
+
 // -----------------------------------------------------------------------
 // Model loading
 // -----------------------------------------------------------------------
@@ -28,13 +43,14 @@ bool WireframeApp::setModel(const std::string& objPath)
     objPath_ = objPath;
     mesh_.vertices.clear();
     mesh_.edges.clear();
+    mesh_.colors.clear();
 
     if (objPath_.empty()) {
-        fprintf(stderr, "WireframeApp: empty OBJ path\n");
+        fprintf(stderr, "WireframeApp: empty path\n");
         return false;
     }
 
-    if (!loadObj(objPath_, mesh_)) {
+    if (!loadMesh(objPath_, mesh_)) {
         fprintf(stderr, "WireframeApp: failed to load mesh '%s'\n",
                 objPath_.c_str());
         return false;
@@ -51,7 +67,7 @@ void WireframeApp::setup(Renderer& /*renderer*/)
 {
     menuWatcher_.acknowledge();
     if (!objPath_.empty() && mesh_.vertices.empty()) {
-        if (!loadObj(objPath_, mesh_)) {
+        if (!loadMesh(objPath_, mesh_)) {
             fprintf(stderr, "WireframeApp: failed to load mesh '%s'\n",
                     objPath_.c_str());
             return;
@@ -139,7 +155,9 @@ void WireframeApp::draw(Renderer& renderer)
     static uint8_t voxels[VOXEL_BYTES];
     memset(voxels, 0, sizeof(voxels));
 
-    const uint8_t R = 0, G = 255, B = 255; // cyan wireframe
+    const bool hasColors = !mesh_.colors.empty();
+    // Default wireframe color (cyan) used when no color data is present.
+    static constexpr uint8_t DEF_R = 0, DEF_G = 255, DEF_B = 255;
 
     int numVerts = (int)mesh_.vertices.size();
 
@@ -167,10 +185,38 @@ void WireframeApp::draw(Renderer& renderer)
         int a = edge[0], b = edge[1];
         if (a < 0 || a >= numVerts || b < 0 || b >= numVerts) continue;
 
-        voxpaint::paint3DLine(voxels,
-                    (int)roundf(tx[a]), (int)roundf(ty[a]), (int)roundf(tz[a]),
-                    (int)roundf(tx[b]), (int)roundf(ty[b]), (int)roundf(tz[b]),
-                    R, G, B);
+        if (hasColors) {
+            // Draw with gradient color interpolation between the two endpoints.
+            int x0 = (int)roundf(tx[a]), y0 = (int)roundf(ty[a]), z0 = (int)roundf(tz[a]);
+            int x1 = (int)roundf(tx[b]), y1 = (int)roundf(ty[b]), z1 = (int)roundf(tz[b]);
+            int dominant = std::max({std::abs(x1 - x0), std::abs(y1 - y0), std::abs(z1 - z0)});
+
+            if (dominant == 0) {
+                voxpaint::paintVoxel(voxels, x0, y0, z0,
+                    mesh_.colors[a][0], mesh_.colors[a][1], mesh_.colors[a][2]);
+            } else {
+                for (int i = 0; i <= dominant; ++i) {
+                    float t  = (float)i / (float)dominant;
+                    int   x  = (int)roundf(x0 + t * (x1 - x0));
+                    int   y  = (int)roundf(y0 + t * (y1 - y0));
+                    int   z  = (int)roundf(z0 + t * (z1 - z0));
+                    auto lerp8 = [](uint8_t ca, uint8_t cb, float tt) -> uint8_t {
+                        return static_cast<uint8_t>(
+                            roundf(static_cast<float>(ca) +
+                                   tt * (static_cast<float>(cb) - static_cast<float>(ca))));
+                    };
+                    uint8_t r = lerp8(mesh_.colors[a][0], mesh_.colors[b][0], t);
+                    uint8_t g = lerp8(mesh_.colors[a][1], mesh_.colors[b][1], t);
+                    uint8_t bv = lerp8(mesh_.colors[a][2], mesh_.colors[b][2], t);
+                    voxpaint::paintVoxel(voxels, x, y, z, r, g, bv);
+                }
+            }
+        } else {
+            voxpaint::paint3DLine(voxels,
+                        (int)roundf(tx[a]), (int)roundf(ty[a]), (int)roundf(tz[a]),
+                        (int)roundf(tx[b]), (int)roundf(ty[b]), (int)roundf(tz[b]),
+                        DEF_R, DEF_G, DEF_B);
+        }
     }
 
     menuWatcher_.drawLoadingIndicator(voxels);
