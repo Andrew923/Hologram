@@ -43,6 +43,7 @@ static std::string getHologramRoot()
 #include "application/PongApp.h"
 #include "application/WireframeApp.h"
 #include "application/FluidApp.h"
+#include "application/MorphApp.h"
 #include "application/TorusKnotApp.h"
 #include "application/ParticleApp.h"
 #include "application/MenuApp.h"
@@ -225,6 +226,7 @@ int main(int argc, char* argv[])
     PongApp      pongApp;
     WireframeApp wireframeApp;
     FluidApp     fluidApp;
+    MorphApp     morphApp;
     TorusKnotApp torusApp;
     ParticleApp  particleApp;
     MenuApp      menuApp;
@@ -241,6 +243,7 @@ int main(int argc, char* argv[])
         if (name == "hand")         return &handApp;
         if (name == "pong")         return &pongApp;
         if (name == "fluid")        return &fluidApp;
+        if (name == "morph")        return &morphApp;
         if (name == "torus")        return &torusApp;
         if (name == "particles")    return &particleApp;
         if (name == "menu")         return &menuApp;

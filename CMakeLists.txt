@@ -39,6 +39,8 @@ set(APP_SOURCES
     src/application/CubeApp.cpp
     src/application/HandApp.cpp
     src/application/WireframeApp.cpp
+    src/application/FluidApp.cpp
+    src/application/MorphApp.cpp
     src/application/TorusKnotApp.cpp
     src/application/ParticleApp.cpp
     src/application/MenuApp.cpp

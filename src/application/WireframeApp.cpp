@@ -10,16 +10,9 @@
 #endif
 
 // -----------------------------------------------------------------------
-// Gesture thresholds
+// Interaction constants
 // -----------------------------------------------------------------------
-// Rotation gesture: index tip (8) and middle tip (12) must be within this
-// normalized distance to activate rotation mode.
-static constexpr float ROTATION_FINGER_PROXIMITY = 0.08f;
-
-// Scale gesture: fingers other than thumb+index must have tip closer to
-// wrist than MCP by this margin to count as "curled".
-// (We check ring and pinky; middle is used for rotation detection.)
-static constexpr float SCALE_SPIN_MAX = 0.06f; // max angular velocity from gesture
+static constexpr float SCALE_SPIN_MAX = 0.06f; // max angular velocity (rad/frame)
 
 // Friction: auto-spin decays slowly when hand is absent
 static constexpr float SPIN_FRICTION = 0.995f;
@@ -93,7 +86,7 @@ void WireframeApp::computeBBox()
 }
 
 // -----------------------------------------------------------------------
-// Finger state helpers
+// Helpers
 // -----------------------------------------------------------------------
 float WireframeApp::landmarkDist(const SharedHandData& hand, int a, int b)
 {
@@ -102,99 +95,38 @@ float WireframeApp::landmarkDist(const SharedHandData& hand, int a, int b)
     return sqrtf(dx * dx + dy * dy);
 }
 
-bool WireframeApp::isFingerExtended(const SharedHandData& hand, int tipIdx, int mcpIdx)
-{
-    // A finger is extended if its tip is farther from the wrist (0)
-    // than its MCP joint is.
-    float tipDist = landmarkDist(hand, tipIdx, 0);
-    float mcpDist = landmarkDist(hand, mcpIdx, 0);
-    return tipDist > mcpDist;
-}
-
 // -----------------------------------------------------------------------
-// Update: process gestures
+// Update: index finger position → rotation, pinch → scale
 // -----------------------------------------------------------------------
 void WireframeApp::update(const SharedHandData& hand)
 {
     menuWatcher_.update(hand);
-    handPresent_ = hand.hand_detected;
 
     if (!hand.hand_detected) {
-        rotationActive_ = false;
-        scaleActive_ = false;
-
-        // Auto-spin: apply current velocity with friction
         rotX_ += spinVelX_;
         rotY_ += spinVelY_;
         rotZ_ += spinVelZ_;
         spinVelX_ *= SPIN_FRICTION;
         spinVelY_ *= SPIN_FRICTION;
         spinVelZ_ *= SPIN_FRICTION;
-
-        // If spin has nearly stopped, restore gentle default spin
-        float totalSpin = fabsf(spinVelX_) + fabsf(spinVelY_) + fabsf(spinVelZ_);
-        if (totalSpin < 0.001f) {
+        if (fabsf(spinVelX_) + fabsf(spinVelY_) + fabsf(spinVelZ_) < 0.001f)
             spinVelY_ = DEFAULT_SPIN_Y;
-        }
         return;
     }
 
-    // --- Detect rotation gesture ---
-    // Index tip (8) and middle tip (12) must be close together
-    float indexMiddleDist = landmarkDist(hand, 8, 12);
-    rotationActive_ = (indexMiddleDist < ROTATION_FINGER_PROXIMITY);
+    // Index tip offset from centre drives rotation velocity
+    float dx = hand.lm_x[8] - 0.5f;
+    float dy = hand.lm_y[8] - 0.5f;
+    spinVelX_ = -dy * SCALE_SPIN_MAX * 2.0f;
+    spinVelY_ =  dx * SCALE_SPIN_MAX * 2.0f;
+    spinVelZ_ = 0.0f;
+    rotX_ += spinVelX_;
+    rotY_ += spinVelY_;
 
-    // --- Detect scale gesture ---
-    // All fingers except thumb (4) and index (8) must be curled.
-    // Check middle (12/9), ring (16/13), pinky (20/17):
-    bool middleCurled = !isFingerExtended(hand, 12, 9);
-    bool ringCurled   = !isFingerExtended(hand, 16, 13);
-    bool pinkyCurled  = !isFingerExtended(hand, 20, 17);
-    bool thumbOut     = isFingerExtended(hand, 4, 2);
-    bool indexOut     = isFingerExtended(hand, 8, 5);
-    scaleActive_ = middleCurled && ringCurled && pinkyCurled && thumbOut && indexOut;
-
-    // --- Apply rotation gesture ---
-    if (rotationActive_) {
-        // Midpoint of index+middle tips gives the "pointer" position
-        float px = (hand.lm_x[8] + hand.lm_x[12]) * 0.5f;
-        float py = (hand.lm_y[8] + hand.lm_y[12]) * 0.5f;
-
-        // Offset from screen center [0.5, 0.5] determines angular velocity
-        float dx = px - 0.5f;  // left/right → Y rotation
-        float dy = py - 0.5f;  // up/down → X rotation
-
-        // Scale to angular velocity (max ~0.06 rad/frame ≈ ~3.4°/frame)
-        spinVelX_ = -dy * SCALE_SPIN_MAX * 2.0f;
-        spinVelY_ =  dx * SCALE_SPIN_MAX * 2.0f;
-        spinVelZ_ = 0.0f;
-
-        rotX_ += spinVelX_;
-        rotY_ += spinVelY_;
-    }
-
-    // --- Apply scale gesture ---
-    if (scaleActive_) {
-        float pinchDist = landmarkDist(hand, 4, 8);
-
-        // Map pinch distance [0.03 .. 0.25] → scale [0.3 .. 2.0]
-        float t = (pinchDist - 0.03f) / 0.22f;
-        t = std::max(0.0f, std::min(1.0f, t));
-        float targetScale = 0.3f + t * 1.7f;
-
-        // Smooth towards target
-        scale_ += (targetScale - scale_) * 0.3f;
-    }
-
-    // If neither gesture is active but hand is present, let it coast
-    if (!rotationActive_ && !scaleActive_) {
-        rotX_ += spinVelX_;
-        rotY_ += spinVelY_;
-        rotZ_ += spinVelZ_;
-        spinVelX_ *= SPIN_FRICTION;
-        spinVelY_ *= SPIN_FRICTION;
-        spinVelZ_ *= SPIN_FRICTION;
-    }
+    // Pinch distance drives scale
+    float t = (landmarkDist(hand, 4, 8) - 0.03f) / 0.22f;
+    t = std::max(0.0f, std::min(1.0f, t));
+    scale_ += (0.3f + t * 1.7f - scale_) * 0.3f;
 }
 
 // -----------------------------------------------------------------------
