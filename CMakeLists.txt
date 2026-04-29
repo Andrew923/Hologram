@@ -31,6 +31,7 @@ set(ENGINE_SOURCES
     src/engine/Network.cpp
     src/engine/InputBridge.cpp
     src/engine/ObjLoader.cpp
+    src/engine/GlbLoader.cpp
     src/engine/JsonConfig.cpp
     src/engine/CameraConfig.cpp
 )
