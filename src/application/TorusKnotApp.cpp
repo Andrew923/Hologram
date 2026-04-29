@@ -20,8 +20,8 @@ static constexpr int   KNOT_Q  = 3;
 static constexpr float TORUS_MAJOR = 0.62f;
 static constexpr float TORUS_MINOR = 0.22f;
 static constexpr float HEIGHT_GAIN = 0.95f;
-static constexpr float TUBE_RADIUS_BASE_PX = 1.4f;
-static constexpr float TUBE_RADIUS_WOBBLE_PX = 0.9f;
+static constexpr float TUBE_RADIUS_BASE_PX = 3.0f;
+static constexpr float TUBE_RADIUS_WOBBLE_PX = 0.0f;
 
 // Keep the knot displaced from the axis dead-core with extra margin for thickness.
 static constexpr float KNOT_EXTRA_Z_MARGIN_PX = 12.0f;

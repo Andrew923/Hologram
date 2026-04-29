@@ -47,16 +47,7 @@ private:
     float spinVelY_ = 0.02f;   // default: slow Y auto-spin
     float spinVelZ_ = 0.0f;
 
-    // --- Gesture detection state ---
-    bool rotationActive_ = false;
-    bool scaleActive_    = false;
-    bool handPresent_    = false;
-
     // --- Helpers ---
     void computeBBox();
-
-    // Finger extension detection: true if fingertip is farther from wrist than MCP
-    static bool isFingerExtended(const SharedHandData& hand, int tipIdx, int mcpIdx);
-    // Distance between two landmarks
     static float landmarkDist(const SharedHandData& hand, int a, int b);
 };

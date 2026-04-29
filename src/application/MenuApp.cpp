@@ -43,6 +43,7 @@ int MenuApp::iconKindForId(const std::string& id) const
     if (id == "wireframe") return 3;
     if (id == "corridor")  return 4;
     if (id == "city")      return 5;
+    if (id == "morph")     return 6;
     return 0;
 }
 
@@ -173,16 +174,17 @@ void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
                        float s, bool highlighted) const
 {
     // Color tables (indexed by kind)
-    static const uint8_t icon_colors[6][3] = {
+    static const uint8_t icon_colors[7][3] = {
         {  0, 255, 255},  // 0 cube: cyan
         {255,  60, 200},  // 1 torus knot: magenta-ish
         {255, 180,  40},  // 2 dots: amber
         { 80, 255, 120},  // 3 tetra: mint
         {  0, 220, 180},  // 4 corridor: teal
         {255, 160,  30},  // 5 city: orange-gold
+        {255, 180,   0},  // 6 morph: amber-gold
     };
     static const uint8_t highlight[3] = {255, 255, 255};
-    int colorIdx = (kind < 6) ? kind : 0;
+    int colorIdx = (kind < 7) ? kind : 0;
     const uint8_t* rgb = highlighted ? highlight : icon_colors[colorIdx];
 
     auto mapToVoxel = [&](float mx, float my, float mz,
@@ -284,6 +286,24 @@ void MenuApp::drawIcon(uint8_t* voxels, int kind, float cx, float cy, float cz,
         for (int i = 0; i < 3; ++i) mapToVoxel(floorPts[i][0], floorPts[i][1], floorPts[i][2], fpx[i], fpy[i], fpz[i]);
         voxpaint::paint3DLine(voxels, fpx[0], fpy[0], fpz[0], fpx[1], fpy[1], fpz[1], rgb[0], rgb[1], rgb[2]);
         voxpaint::paint3DLine(voxels, fpx[1], fpy[1], fpz[1], fpx[2], fpy[2], fpz[2], rgb[0], rgb[1], rgb[2]);
+    } else if (kind == 6) {
+        // Morph: octahedron icon (double-pyramid, visually distinct)
+        static const float v[6][3] = {
+            { 1.0f,  0.0f,  0.0f}, {-1.0f,  0.0f,  0.0f},
+            { 0.0f,  1.0f,  0.0f}, { 0.0f, -1.0f,  0.0f},
+            { 0.0f,  0.0f,  1.0f}, { 0.0f,  0.0f, -1.0f},
+        };
+        static const int e[12][2] = {
+            {0,2},{0,3},{0,4},{0,5},
+            {1,2},{1,3},{1,4},{1,5},
+            {2,4},{2,5},{3,4},{3,5},
+        };
+        int px[6], py[6], pz[6];
+        for (int i = 0; i < 6; ++i) mapToVoxel(v[i][0], v[i][1], v[i][2], px[i], py[i], pz[i]);
+        for (int i = 0; i < 12; ++i)
+            voxpaint::paint3DLine(voxels, px[e[i][0]], py[e[i][0]], pz[e[i][0]],
+                                         px[e[i][1]], py[e[i][1]], pz[e[i][1]],
+                                         rgb[0], rgb[1], rgb[2]);
     } else if (kind == 5) {
         // City: three buildings of different heights side by side
         static const float buildings[3][4] = {
