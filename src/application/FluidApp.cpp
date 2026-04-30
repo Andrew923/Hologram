@@ -536,6 +536,53 @@ void FluidApp::draw(Renderer& renderer)
                   | GL_TEXTURE_FETCH_BARRIER_BIT);
 
     glUseProgram(0);
+
+    // Optional readback for diagnostics: enable with FLUID_DEBUG=1, prints
+    // every 60 frames. Stalls the GPU pipeline so leave off in production.
+    if (const char* dbg = std::getenv("FLUID_DEBUG"); dbg && dbg[0] == '1' &&
+        (frameCounter_ % 60) == 0) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, particleSSBO_);
+        const ParticleCpu* p = (const ParticleCpu*)glMapBufferRange(
+            GL_SHADER_STORAGE_BUFFER, 0,
+            sizeof(ParticleCpu) * PARTICLE_COUNT, GL_MAP_READ_BIT);
+        if (p) {
+            int alive = 0, alivePinch = 0;
+            float yMin = 1e9f, yMax = -1e9f, ySum = 0.0f;
+            float xSum = 0.0f, zSum = 0.0f;
+            float speedMax = 0.0f, speedSum = 0.0f;
+            for (int i = 0; i < PARTICLE_COUNT; ++i) {
+                if (p[i].life < 0.0f) continue;
+                ++alive;
+                if (i >= POOL_BASE_COUNT) ++alivePinch;
+                float x = p[i].pos[0];
+                float y = p[i].pos[1];
+                float z = p[i].pos[2];
+                yMin = std::fmin(yMin, y);
+                yMax = std::fmax(yMax, y);
+                xSum += x;
+                ySum += y;
+                zSum += z;
+                float s = std::sqrt(p[i].vel[0]*p[i].vel[0]
+                                  + p[i].vel[1]*p[i].vel[1]
+                                  + p[i].vel[2]*p[i].vel[2]);
+                speedMax = std::fmax(speedMax, s);
+                speedSum += s;
+            }
+            float yMean = alive ? ySum / alive : 0.0f;
+            float xMean = alive ? xSum / alive : 0.0f;
+            float zMean = alive ? zSum / alive : 0.0f;
+            float sMean = alive ? speedSum / alive : 0.0f;
+            fprintf(stderr,
+                "FluidApp[%u]: alive=%d (pinch=%d)  COM=(%.1f,%.1f,%.1f) "
+                "y=[%.2f..%.2f]  speed mean=%.2f max=%.2f  "
+                "g=(%.2f,%.2f,%.2f) pinch=%s dt=%.4f\n",
+                frameCounter_, alive, alivePinch, xMean, yMean, zMean,
+                yMin, yMax, sMean, speedMax, gx, gy, gz,
+                pinchActive_ ? "ON" : "off", dt);
+            glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        }
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    }
 }
 
 // -----------------------------------------------------------------------
