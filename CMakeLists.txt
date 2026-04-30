@@ -103,6 +103,24 @@ configure_file(src/shaders/fluid_sim.glsl
 configure_file(src/shaders/slice_compute_calibrate.glsl
                ${CMAKE_BINARY_DIR}/shaders/slice_compute_calibrate.glsl COPYONLY)
 
+# FLIP particle fluid compute shaders
+set(FLIP_SHADERS
+    clear_grid.glsl
+    particle_recycle.glsl
+    p2g.glsl
+    normalize_vel.glsl
+    mark_cells.glsl
+    divergence.glsl
+    pressure_jacobi.glsl
+    subtract_grad.glsl
+    g2p_advect.glsl
+    voxel_splat.glsl
+)
+foreach(S ${FLIP_SHADERS})
+    configure_file(src/shaders/flip/${S}
+                   ${CMAKE_BINARY_DIR}/shaders/flip/${S} COPYONLY)
+endforeach()
+
 # Print build summary
 message(STATUS "OpenGL libraries : ${OPENGL_LIBRARIES}")
 message(STATUS "EGL library      : ${OpenGL_EGL_LIBRARIES}")
