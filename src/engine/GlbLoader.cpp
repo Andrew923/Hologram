@@ -530,6 +530,10 @@ bool loadGlb(const std::string& path, ObjMesh& mesh)
                 bool colNorm;
                 const uint8_t* colData = resolveAccessor(
                     colAccIdx, colCompType, colNComps, colNorm, colCount, colStride);
+                // GLTF spec requires integer COLOR_0 types to be normalized.
+                // Some exporters omit the flag; enforce it here so raw byte
+                // values (e.g. 200) are not misread as full-brightness floats.
+                if (colCompType != 5126 /*FLOAT*/) colNorm = true;
                 if (colData && colNComps >= 3 && colCount == posCount) {
                     primHasColors = true;
                     anyColors = true;
@@ -555,23 +559,29 @@ bool loadGlb(const std::string& path, ObjMesh& mesh)
             }
 
             // ── Fallback: material base color ─────────────────────────────────
+            // GLTF spec defines baseColorFactor default as [1,1,1,1] (white)
+            // when the key is absent.  Apply it so materials without an explicit
+            // factor still produce a color rather than falling through to cyan.
             if (!primHasColors && matIdx >= 0 && materialsArr.isArr() &&
                     static_cast<size_t>(matIdx) < materialsArr.size()) {
                 const JVal& mat = materialsArr.at(static_cast<size_t>(matIdx));
-                const JVal& bcf = mat.at("pbrMetallicRoughness").at("baseColorFactor");
-                if (bcf.isArr() && bcf.size() >= 3) {
-                    auto clamp01 = [](float v){ return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); };
-                    uint8_t r = static_cast<uint8_t>(clamp01(static_cast<float>(bcf.at(0).asNum(1.0))) * 255.0f);
-                    uint8_t g = static_cast<uint8_t>(clamp01(static_cast<float>(bcf.at(1).asNum(1.0))) * 255.0f);
-                    uint8_t b = static_cast<uint8_t>(clamp01(static_cast<float>(bcf.at(2).asNum(1.0))) * 255.0f);
+                // baseColorFactor defaults to [1,1,1,1] per the GLTF 2.0 spec.
+                const JVal& pbr = mat.at("pbrMetallicRoughness");
+                const JVal& bcf = pbr.isObj() ? pbr.at("baseColorFactor") : pbr;
+                auto clamp01 = [](float v){ return v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v); };
+                float fr = static_cast<float>((bcf.isArr() && bcf.size() > 0) ? bcf.at(0).asNum(1.0) : 1.0);
+                float fg = static_cast<float>((bcf.isArr() && bcf.size() > 1) ? bcf.at(1).asNum(1.0) : 1.0);
+                float fb = static_cast<float>((bcf.isArr() && bcf.size() > 2) ? bcf.at(2).asNum(1.0) : 1.0);
+                uint8_t r = static_cast<uint8_t>(clamp01(fr) * 255.0f);
+                uint8_t g = static_cast<uint8_t>(clamp01(fg) * 255.0f);
+                uint8_t b = static_cast<uint8_t>(clamp01(fb) * 255.0f);
 
-                    primHasColors = true;
-                    anyColors = true;
-                    while (static_cast<int>(mesh.colors.size()) < vertexOffset)
-                        mesh.colors.push_back({0, 255, 255});
-                    for (int vi = 0; vi < posCount; ++vi)
-                        mesh.colors.push_back({r, g, b});
-                }
+                primHasColors = true;
+                anyColors = true;
+                while (static_cast<int>(mesh.colors.size()) < vertexOffset)
+                    mesh.colors.push_back({0, 255, 255});
+                for (int vi = 0; vi < posCount; ++vi)
+                    mesh.colors.push_back({r, g, b});
             }
 
             // If this primitive has no color but others did, pad with default.
