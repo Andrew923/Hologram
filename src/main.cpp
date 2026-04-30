@@ -43,6 +43,7 @@ static std::string getHologramRoot()
 #include "application/PongApp.h"
 #include "application/WireframeApp.h"
 #include "application/FluidApp.h"
+#include "application/WaveApp.h"
 #include "application/MorphApp.h"
 #include "application/TorusKnotApp.h"
 #include "application/ParticleApp.h"
@@ -121,9 +122,9 @@ static void usage(const char* prog)
 {
     fprintf(stderr,
         "Usage: %s --app <name> --ip <pi_ip> --port <port>\n"
-        "  --app         Application: cube, hand, pong, wireframe, fluid,\n"
+        "  --app         Application: cube, hand, pong, wireframe, fluid, wave,\n"
         "                torus, particles, menu  (default: cube)\n"
-        "  --ip          Target IP address of Raspberry Pi (default: 10.42.0.169)\n"
+        "  --ip          Target IP address of Raspberry Pi (default: 10.42.0.168)\n"
         "  --port        Target UDP port (default: 4210)\n"
         "  --obj         Path to .obj file (for wireframe app)\n"
         "  --no-docker   Skip launching the Docker hand tracker sidecar\n"
@@ -139,7 +140,7 @@ int main(int argc, char* argv[])
 {
     // Defaults
     char     appName[32]      = "cube";
-    char     targetIP[64]     = "10.42.0.169";
+    char     targetIP[64]     = "10.42.0.168";
     uint16_t targetPort       = 4210;
     bool     noDocker         = false;
     char     objPath[256]     = "";
@@ -226,6 +227,7 @@ int main(int argc, char* argv[])
     PongApp      pongApp;
     WireframeApp wireframeApp;
     FluidApp     fluidApp;
+    WaveApp      waveApp;
     MorphApp     morphApp;
     TorusKnotApp torusApp;
     ParticleApp  particleApp;
@@ -243,6 +245,7 @@ int main(int argc, char* argv[])
         if (name == "hand")         return &handApp;
         if (name == "pong")         return &pongApp;
         if (name == "fluid")        return &fluidApp;
+        if (name == "wave")         return &waveApp;
         if (name == "morph")        return &morphApp;
         if (name == "torus")        return &torusApp;
         if (name == "particles")    return &particleApp;

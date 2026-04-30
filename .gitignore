@@ -1,2 +1,5 @@
 test/Depth-Anything-V2/
 build/
+
+__pycache__/
+*.pyc

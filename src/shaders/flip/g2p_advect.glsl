@@ -12,6 +12,7 @@ struct Particle {
 
 layout(std430, binding = 0) buffer ParticleSSBO { Particle particles[]; };
 
+layout(binding = 0, r32f) uniform readonly image3D gWeightF;
 layout(binding = 1, r32f) uniform image3D gVelX;
 layout(binding = 2, r32f) uniform image3D gVelY;
 layout(binding = 3, r32f) uniform image3D gVelZ;
@@ -23,6 +24,17 @@ uniform uint  uParticleCount;
 uniform float uDt;
 uniform float uFlipAlpha;
 
+// Anti-compression buoyancy: FLIP/PIC volume drifts toward zero over time
+// because trilinear gather can't perfectly preserve incompressibility, so the
+// fluid pancakes onto the floor. Sampling local weight (≈ particles per cell)
+// and adding an upward kick wherever the cell is over-dense gives the solver
+// a steady volume target to fight gravity against. Excess is capped so that
+// transient high-density events (pinch-spawn streams) don't launch particles
+// through the ceiling.
+const float W_TARGET     = 4.0;   // ~4 particles per grid cell at rest
+const float W_KICK       = 6.0;   // voxel/sec^2 per excess particle
+const float W_MAX_EXCESS = 4.0;   // cap so dense pinch streams don't blast up
+
 const float GRID_TO_VOX = 2.0;
 
 // World geometry in voxel units (matches mark_cells / slicer).
@@ -32,7 +44,7 @@ const float R_INNER   = 14.5;
 const float R_OUTER   = 61.5;
 const float Y_FLOOR   = 8.0;
 const float Y_CEIL    = 63.5;
-const float RESTITUTION = 0.05;
+const float RESTITUTION = 0.4;
 
 // Trilinear sample of a single r32f image at grid-space coords. The image
 // uniform is bound by name at each call site so the format qualifier matches.
@@ -108,6 +120,12 @@ void main() {
     vec3 picVel  = vNew;
     vec3 flipVel = vp + (vNew - vSave);
     vp = mix(picVel, flipVel, uFlipAlpha);
+
+    // Anti-compression buoyancy: point-sample the weight texture; over-dense
+    // cells push particles upward to counteract FLIP volume drift.
+    ivec3 wc = ivec3(clamp(g, vec3(0.0), vec3(63.0, 31.0, 63.0)));
+    float w = imageLoad(gWeightF, wc).r;
+    if (w > W_TARGET) vp.y += W_KICK * min(w - W_TARGET, W_MAX_EXCESS) * uDt;
 
     // RK2 (midpoint) advection in voxel units.
     vec3 mid = pos + 0.5 * uDt * vp;

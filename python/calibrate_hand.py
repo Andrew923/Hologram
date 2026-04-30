@@ -44,6 +44,8 @@ def parse_args():
                    help="Known camera-to-palm distance in meters (default: 0.50)")
     p.add_argument("--device", type=int, default=0)
     p.add_argument("--samples", type=int, default=30)
+    p.add_argument("--headless", action="store_true",
+                   help="Run without display (no cv2.imshow)")
     return p.parse_args()
 
 
@@ -69,7 +71,10 @@ def main():
 
     print(f"Camera: {img_w}x{img_h}  fx={fx:.1f}")
     print(f"Hold your open palm {args.distance_m:.2f}m from the camera.")
-    print("Press 'q' to abort.\n")
+    if args.headless:
+        print("Headless mode: press Ctrl+C to abort.\n")
+    else:
+        print("Press 'q' to abort.\n")
 
     cap = cv2.VideoCapture(args.device)
     if not cap.isOpened():
@@ -87,45 +92,58 @@ def main():
 
     measurements = []
 
-    while len(measurements) < args.samples:
-        ret, frame = cap.read()
-        if not ret:
-            continue
+    try:
+        while len(measurements) < args.samples:
+            ret, frame = cap.read()
+            if not ret:
+                continue
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = hands.process(rgb)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = hands.process(rgb)
 
-        vis = frame.copy()
-        if result.multi_hand_landmarks:
-            lms = result.multi_hand_landmarks[0]
-            mp_draw.draw_landmarks(vis, lms, mp_hands.HAND_CONNECTIONS)
+            if result.multi_hand_landmarks:
+                lms = result.multi_hand_landmarks[0]
 
-            wrist = lms.landmark[0]
-            idx_mcp = lms.landmark[5]
-            px_wrist = np.array([wrist.x * img_w, wrist.y * img_h])
-            px_mcp   = np.array([idx_mcp.x * img_w, idx_mcp.y * img_h])
-            L_px = float(np.linalg.norm(px_mcp - px_wrist))
+                wrist = lms.landmark[0]
+                idx_mcp = lms.landmark[5]
+                px_wrist = np.array([wrist.x * img_w, wrist.y * img_h])
+                px_mcp   = np.array([idx_mcp.x * img_w, idx_mcp.y * img_h])
+                L_px = float(np.linalg.norm(px_mcp - px_wrist))
 
-            if L_px > 5.0:
-                measurements.append(L_px)
-                n = len(measurements)
-                if n % 5 == 0:
-                    avg = np.mean(measurements)
-                    print(f"  Sample {n}/{args.samples}  avg bone px = {avg:.1f}")
+                if L_px > 5.0:
+                    measurements.append(L_px)
+                    n = len(measurements)
+                    if n % 5 == 0:
+                        avg = np.mean(measurements)
+                        print(f"  Sample {n}/{args.samples}  avg bone px = {avg:.1f}")
 
-        status = f"Samples: {len(measurements)}/{args.samples}"
-        cv2.putText(vis, status, (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.imshow("Hand Calibration", vis)
+            if not args.headless:
+                vis = frame.copy()
+                if result.multi_hand_landmarks:
+                    mp_draw.draw_landmarks(vis, result.multi_hand_landmarks[0],
+                                           mp_hands.HAND_CONNECTIONS)
+                status = f"Samples: {len(measurements)}/{args.samples}"
+                cv2.putText(vis, status, (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.imshow("Hand Calibration", vis)
 
-        if (cv2.waitKey(30) & 0xFF) == ord('q'):
-            print("Aborted.")
-            cap.release()
+                if (cv2.waitKey(30) & 0xFF) == ord('q'):
+                    print("Aborted.")
+                    cap.release()
+                    cv2.destroyAllWindows()
+                    hands.close()
+                    sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nAborted.")
+        cap.release()
+        if not args.headless:
             cv2.destroyAllWindows()
-            sys.exit(1)
+        hands.close()
+        sys.exit(1)
 
     cap.release()
-    cv2.destroyAllWindows()
+    if not args.headless:
+        cv2.destroyAllWindows()
     hands.close()
 
     avg_px = float(np.mean(measurements))

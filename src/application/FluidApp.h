@@ -23,14 +23,18 @@ public:
     }
 
     // ----- Tunables (public so free helpers in FluidApp.cpp can read them) -
-    static constexpr int   PARTICLE_COUNT = 60000;
+    static constexpr int   PARTICLE_COUNT       = 40000;
+    static constexpr int   POOL_BASE_COUNT      = 25000;  // bowl pool size; rest is pinch reserve
+    static constexpr int   PINCH_SPAWN_PER_FRAME = 200;   // droplets/frame while pinching
+    static constexpr float PINCH_THRESHOLD      = 0.08f;  // thumb-index distance (norm coords)
+    static constexpr float PINCH_SPAWN_Y        = 55.0f;  // voxel y where droplets enter
     static constexpr int   GRID_W = 64;
     static constexpr int   GRID_H = 32;
     static constexpr int   GRID_D = 64;
-    static constexpr int   PRESSURE_ITERATIONS = 40;
-    static constexpr float FLIP_ALPHA   = 0.97f;
-    static constexpr float TILT_K       = 1.5f;
-    static constexpr float GRAVITY_MAG  = 28.0f;  // voxel/sec^2 (~9.8 m/s² scaled to voxels)
+    static constexpr int   PRESSURE_ITERATIONS = 60;
+    static constexpr float FLIP_ALPHA   = 0.96f;
+    static constexpr float TILT_K       = 2.5f;
+    static constexpr float GRAVITY_MAG  = 12.0f;  // voxel/sec^2 (low so fluid doesn't pancake)
     static constexpr float DT_MIN       = 1.0f / 120.0f;
     static constexpr float DT_MAX       = 1.0f / 30.0f;
 
@@ -40,6 +44,7 @@ private:
     bool   loadProgram(const char* path, GLuint& outProg);
     void   createGridTextures();
     void   initParticleBuffer();
+    void   setPinch(float nx, float nz);  // normalised image coords → voxel space
 
     // ----- Per-frame dispatch helpers --------------------------------------
     void   bindGridImages_Clear();
@@ -83,9 +88,12 @@ private:
     GLuint texCellType_   = 0;
 
     // ----- Cached uniform locations ---------------------------------------
-    GLint uRecycleCount_ = -1, uRecycleFrame_ = -1, uRecycleFill_ = -1;
+    GLint uRecycleCount_ = -1, uRecycleBase_ = -1;
+    GLint uRecycleFrame_ = -1, uRecycleFill_ = -1;
+    GLint uRecyclePinchActive_ = -1, uRecyclePinchPos_ = -1;
+    GLint uRecyclePinchStart_  = -1, uRecyclePinchCount_ = -1;
     GLint uP2GCount_ = -1;
-    GLint uNormGravity_ = -1, uNormDt_ = -1;
+    GLint uSnapGravity_ = -1, uSnapDt_ = -1;
     GLint uG2PCount_ = -1, uG2PDt_ = -1, uG2PAlpha_ = -1;
     GLint uSplatCount_ = -1, uSplatDt_ = -1;
 
@@ -93,6 +101,11 @@ private:
     float fingerSmoothX_ = 0.5f;
     float fingerSmoothY_ = 0.5f;
     bool  fingerActive_  = false;
+    bool  pinchActive_   = false;
+    float pinchVoxelX_   = 64.0f;
+    float pinchVoxelY_   = PINCH_SPAWN_Y;
+    float pinchVoxelZ_   = 64.0f;
+    uint32_t pinchSpawnCursor_ = 0;
     uint32_t frameCounter_ = 0;
     std::chrono::steady_clock::time_point lastTick_{};
     bool   firstFrame_ = true;

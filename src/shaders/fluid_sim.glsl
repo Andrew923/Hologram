@@ -21,7 +21,7 @@ const float WAVE_SPEED2   = 0.22;  // c²; stability requires c² ≤ 0.5
 const float DAMPING       = 0.995; // per-frame energy loss (mix toward rest)
 const float FINGER_RADIUS = 10.0;  // influence radius in voxels
 const int   Y_FLOOR       = 8;     // voxel Y where pool floor sits
-const int   MAX_H         = 16;    // max voxels above floor
+const int   MAX_H         = 48;    // max voxels above floor (3× original 16)
 
 const float CX      = 63.5;
 const float CZ      = 63.5;

@@ -41,6 +41,7 @@ set(APP_SOURCES
     src/application/HandApp.cpp
     src/application/WireframeApp.cpp
     src/application/FluidApp.cpp
+    src/application/WaveApp.cpp
     src/application/MorphApp.cpp
     src/application/TorusKnotApp.cpp
     src/application/ParticleApp.cpp
@@ -109,6 +110,7 @@ set(FLIP_SHADERS
     particle_recycle.glsl
     p2g.glsl
     normalize_vel.glsl
+    snapshot_vel.glsl
     mark_cells.glsl
     divergence.glsl
     pressure_jacobi.glsl

@@ -123,9 +123,10 @@ void FluidApp::initParticleBuffer()
 
     const float cx = 63.5f, cz = 63.5f;
     const float rIn = 16.0f, rOut = 58.0f;
-    const float yLo = 9.0f,  yHi  = 22.0f;
+    const float yLo = 9.0f,  yHi  = 44.0f;   // tall initial column (~35 voxels)
 
-    for (int i = 0; i < PARTICLE_COUNT; ++i) {
+    // Bowl pool: alive, distributed in the annulus.
+    for (int i = 0; i < POOL_BASE_COUNT; ++i) {
         float r = std::sqrt(u01(rng) * (rOut*rOut - rIn*rIn) + rIn*rIn);
         float th = u01(rng) * 6.2831853f;
         ParticleCpu& p = particles[i];
@@ -133,9 +134,15 @@ void FluidApp::initParticleBuffer()
         p.pos[1] = yLo + u01(rng) * (yHi - yLo);
         p.pos[2] = cz + r * std::sin(th) + (u01(rng) - 0.5f) * 0.6f;
         p.life   = 1.0f;
-        p.vel[0] = 0.0f;
-        p.vel[1] = 0.0f;
-        p.vel[2] = 0.0f;
+        p.vel[0] = p.vel[1] = p.vel[2] = 0.0f;
+        p.pad    = 0.0f;
+    }
+    // Pinch reserve: dead, parked at the origin until a pinch spawns them.
+    for (int i = POOL_BASE_COUNT; i < PARTICLE_COUNT; ++i) {
+        ParticleCpu& p = particles[i];
+        p.pos[0] = p.pos[1] = p.pos[2] = 0.0f;
+        p.life   = -1.0f;
+        p.vel[0] = p.vel[1] = p.vel[2] = 0.0f;
         p.pad    = 0.0f;
     }
 
@@ -170,12 +177,17 @@ void FluidApp::setup(Renderer& /*renderer*/)
         return;
     }
 
-    uRecycleCount_ = glGetUniformLocation(progRecycle_,   "uParticleCount");
-    uRecycleFrame_ = glGetUniformLocation(progRecycle_,   "uFrame");
-    uRecycleFill_  = glGetUniformLocation(progRecycle_,   "uFillHeight");
+    uRecycleCount_       = glGetUniformLocation(progRecycle_, "uParticleCount");
+    uRecycleBase_        = glGetUniformLocation(progRecycle_, "uBaseCount");
+    uRecycleFrame_       = glGetUniformLocation(progRecycle_, "uFrame");
+    uRecycleFill_        = glGetUniformLocation(progRecycle_, "uFillHeight");
+    uRecyclePinchActive_ = glGetUniformLocation(progRecycle_, "uPinchActive");
+    uRecyclePinchPos_    = glGetUniformLocation(progRecycle_, "uPinchPos");
+    uRecyclePinchStart_  = glGetUniformLocation(progRecycle_, "uPinchSpawnStart");
+    uRecyclePinchCount_  = glGetUniformLocation(progRecycle_, "uPinchSpawnCount");
     uP2GCount_     = glGetUniformLocation(progP2G_,       "uParticleCount");
-    uNormGravity_  = glGetUniformLocation(progNormalize_, "uGravity");
-    uNormDt_       = glGetUniformLocation(progNormalize_, "uDt");
+    uSnapGravity_  = glGetUniformLocation(progSnapshot_,  "uGravity");
+    uSnapDt_       = glGetUniformLocation(progSnapshot_,  "uDt");
     uG2PCount_     = glGetUniformLocation(progG2P_,       "uParticleCount");
     uG2PDt_        = glGetUniformLocation(progG2P_,       "uDt");
     uG2PAlpha_     = glGetUniformLocation(progG2P_,       "uFlipAlpha");
@@ -195,8 +207,36 @@ void FluidApp::update(const SharedHandData& hand)
 {
     menuWatcher_.update(hand);
 
+    // ---- ENV var overrides for headless testing ---------------------------
+    // TILT_FAKE_X / TILT_FAKE_Z (range [-1,1]) drive the gravity tilt vector.
+    // PINCH_FAKE_X / PINCH_FAKE_Z (range [0,1], image-space) enable the pinch
+    // droplet stream at that location. Either or both may be set.
+    const char* envTiltX  = std::getenv("TILT_FAKE_X");
+    const char* envTiltZ  = std::getenv("TILT_FAKE_Z");
+    const char* envPinchX = std::getenv("PINCH_FAKE_X");
+    const char* envPinchZ = std::getenv("PINCH_FAKE_Z");
+    if (envTiltX || envTiltZ || envPinchX || envPinchZ) {
+        fingerActive_ = true;
+        float tx = envTiltX ? clampf(std::atof(envTiltX), -1.0f, 1.0f) : 0.0f;
+        float tz = envTiltZ ? clampf(std::atof(envTiltZ), -1.0f, 1.0f) : 0.0f;
+        fingerSmoothX_ = 0.5f + 0.5f * tx;
+        fingerSmoothY_ = 0.5f + 0.5f * tz;
+
+        if (envPinchX || envPinchZ) {
+            float px = envPinchX ? clampf(std::atof(envPinchX), 0.0f, 1.0f) : 0.5f;
+            float pz = envPinchZ ? clampf(std::atof(envPinchZ), 0.0f, 1.0f) : 0.5f;
+            setPinch(px, pz);
+        } else {
+            pinchActive_ = false;
+        }
+        return;
+    }
+
     fingerActive_ = hand.hand_detected;
-    if (!hand.hand_detected) return;
+    if (!hand.hand_detected) {
+        pinchActive_ = false;
+        return;
+    }
 
     float rawX = clampf(hand.lm_x[8], 0.0f, 1.0f);
     float rawY = clampf(hand.lm_y[8], 0.0f, 1.0f);
@@ -204,6 +244,39 @@ void FluidApp::update(const SharedHandData& hand)
     // Low-pass to kill landmark jitter without smearing slosh.
     fingerSmoothX_ += 0.25f * (rawX - fingerSmoothX_);
     fingerSmoothY_ += 0.25f * (rawY - fingerSmoothY_);
+
+    // Pinch detection: thumb tip (4) ↔ index tip (8) Euclidean distance.
+    float pinchDist = std::hypot(hand.lm_x[4] - hand.lm_x[8],
+                                 hand.lm_y[4] - hand.lm_y[8]);
+    if (pinchDist < PINCH_THRESHOLD) {
+        float mxn = 0.5f * (hand.lm_x[4] + hand.lm_x[8]);
+        float mzn = 0.5f * (hand.lm_y[4] + hand.lm_y[8]);
+        setPinch(mxn, mzn);
+    } else {
+        pinchActive_ = false;
+    }
+}
+
+// Map a normalised (image-space) pinch midpoint to a voxel-space spawn point,
+// pushing it outside the bowl's inner dead zone if necessary.
+void FluidApp::setPinch(float nx, float nz)
+{
+    float x = clampf(nx * 128.0f, 16.0f, 112.0f);
+    float z = clampf(nz * 128.0f, 16.0f, 112.0f);
+    const float CX = 63.5f, CZ = 63.5f;
+    const float SAFE_R = 20.0f;  // outside R_INNER (14.5) with margin
+    float dx = x - CX, dz = z - CZ;
+    float d  = std::hypot(dx, dz);
+    if (d < SAFE_R) {
+        if (d < 1e-4f) { dx = SAFE_R; dz = 0.0f; }
+        else           { float s = SAFE_R / d; dx *= s; dz *= s; }
+        x = CX + dx;
+        z = CZ + dz;
+    }
+    pinchVoxelX_ = x;
+    pinchVoxelZ_ = z;
+    pinchVoxelY_ = PINCH_SPAWN_Y;
+    pinchActive_ = true;
 }
 
 // -----------------------------------------------------------------------
@@ -244,12 +317,13 @@ void FluidApp::bindGridImages_Normalize()
 
 void FluidApp::bindGridImages_Snapshot()
 {
-    glBindImageTexture(0, texVelX_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
-    glBindImageTexture(1, texVelY_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
-    glBindImageTexture(2, texVelZ_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
+    glBindImageTexture(0, texVelX_,     0, GL_TRUE, 0, GL_READ_WRITE, GL_R32F);
+    glBindImageTexture(1, texVelY_,     0, GL_TRUE, 0, GL_READ_WRITE, GL_R32F);
+    glBindImageTexture(2, texVelZ_,     0, GL_TRUE, 0, GL_READ_WRITE, GL_R32F);
     glBindImageTexture(3, texVelXSave_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
     glBindImageTexture(4, texVelYSave_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
     glBindImageTexture(5, texVelZSave_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(6, texWeightF_,  0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
 }
 
 void FluidApp::bindGridImages_MarkCells()
@@ -286,6 +360,7 @@ void FluidApp::bindGridImages_SubtractGrad(GLuint pSource)
 
 void FluidApp::bindGridImages_G2P()
 {
+    glBindImageTexture(0, texWeightF_,  0, GL_TRUE, 0, GL_READ_ONLY, GL_R32F);
     glBindImageTexture(1, texVelX_,     0, GL_TRUE, 0, GL_READ_ONLY, GL_R32F);
     glBindImageTexture(2, texVelY_,     0, GL_TRUE, 0, GL_READ_ONLY, GL_R32F);
     glBindImageTexture(3, texVelZ_,     0, GL_TRUE, 0, GL_READ_ONLY, GL_R32F);
@@ -359,8 +434,21 @@ void FluidApp::draw(Renderer& renderer)
     // ----- A. Recycle dead particles (no barrier needed before, untouched) -
     glUseProgram(progRecycle_);
     glUniform1ui(uRecycleCount_, (GLuint)PARTICLE_COUNT);
+    glUniform1ui(uRecycleBase_,  (GLuint)POOL_BASE_COUNT);
     glUniform1ui(uRecycleFrame_, (GLuint)frameCounter_);
-    glUniform1f (uRecycleFill_,  13.0f);
+    glUniform1f (uRecycleFill_,  35.0f);
+
+    GLuint pinchSpawnCount = pinchActive_ ? (GLuint)PINCH_SPAWN_PER_FRAME : 0u;
+    glUniform1ui(uRecyclePinchActive_, pinchSpawnCount > 0u ? 1u : 0u);
+    glUniform3f (uRecyclePinchPos_, pinchVoxelX_, pinchVoxelY_, pinchVoxelZ_);
+    glUniform1ui(uRecyclePinchStart_, (GLuint)pinchSpawnCursor_);
+    glUniform1ui(uRecyclePinchCount_, pinchSpawnCount);
+
+    if (pinchSpawnCount > 0u) {
+        const GLuint poolPinchSize = (GLuint)(PARTICLE_COUNT - POOL_BASE_COUNT);
+        pinchSpawnCursor_ = (pinchSpawnCursor_ + pinchSpawnCount) % poolPinchSize;
+    }
+
     dispatchParticles();
     barrier();
 
@@ -381,17 +469,19 @@ void FluidApp::draw(Renderer& renderer)
     dispatchParticles();
     barrier();
 
-    // ----- D. Decode + normalize + apply gravity --------------------------
+    // ----- D. Decode + normalize (no gravity yet) -------------------------
     glUseProgram(progNormalize_);
     bindGridImages_Normalize();
-    glUniform3f(uNormGravity_, gx, gy, gz);
-    glUniform1f(uNormDt_, dt);
     dispatchGrid();
     barrier();
 
-    // ----- D2. Snapshot post-gravity velocity (for FLIP delta in G2P) -----
+    // ----- D2. Snapshot pre-gravity velocity, then apply gravity ---------
+    // The snapshot must precede gravity so the G2P FLIP delta
+    // (vNew − vSave) carries both gravity and pressure correction.
     glUseProgram(progSnapshot_);
     bindGridImages_Snapshot();
+    glUniform3f(uSnapGravity_, gx, gy, gz);
+    glUniform1f(uSnapDt_, dt);
     dispatchGrid();
     barrier();
 
@@ -446,6 +536,53 @@ void FluidApp::draw(Renderer& renderer)
                   | GL_TEXTURE_FETCH_BARRIER_BIT);
 
     glUseProgram(0);
+
+    // Optional readback for diagnostics: enable with FLUID_DEBUG=1, prints
+    // every 60 frames. Stalls the GPU pipeline so leave off in production.
+    if (const char* dbg = std::getenv("FLUID_DEBUG"); dbg && dbg[0] == '1' &&
+        (frameCounter_ % 60) == 0) {
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, particleSSBO_);
+        const ParticleCpu* p = (const ParticleCpu*)glMapBufferRange(
+            GL_SHADER_STORAGE_BUFFER, 0,
+            sizeof(ParticleCpu) * PARTICLE_COUNT, GL_MAP_READ_BIT);
+        if (p) {
+            int alive = 0, alivePinch = 0;
+            float yMin = 1e9f, yMax = -1e9f, ySum = 0.0f;
+            float xSum = 0.0f, zSum = 0.0f;
+            float speedMax = 0.0f, speedSum = 0.0f;
+            for (int i = 0; i < PARTICLE_COUNT; ++i) {
+                if (p[i].life < 0.0f) continue;
+                ++alive;
+                if (i >= POOL_BASE_COUNT) ++alivePinch;
+                float x = p[i].pos[0];
+                float y = p[i].pos[1];
+                float z = p[i].pos[2];
+                yMin = std::fmin(yMin, y);
+                yMax = std::fmax(yMax, y);
+                xSum += x;
+                ySum += y;
+                zSum += z;
+                float s = std::sqrt(p[i].vel[0]*p[i].vel[0]
+                                  + p[i].vel[1]*p[i].vel[1]
+                                  + p[i].vel[2]*p[i].vel[2]);
+                speedMax = std::fmax(speedMax, s);
+                speedSum += s;
+            }
+            float yMean = alive ? ySum / alive : 0.0f;
+            float xMean = alive ? xSum / alive : 0.0f;
+            float zMean = alive ? zSum / alive : 0.0f;
+            float sMean = alive ? speedSum / alive : 0.0f;
+            fprintf(stderr,
+                "FluidApp[%u]: alive=%d (pinch=%d)  COM=(%.1f,%.1f,%.1f) "
+                "y=[%.2f..%.2f]  speed mean=%.2f max=%.2f  "
+                "g=(%.2f,%.2f,%.2f) pinch=%s dt=%.4f\n",
+                frameCounter_, alive, alivePinch, xMean, yMean, zMean,
+                yMin, yMax, sMean, speedMax, gx, gy, gz,
+                pinchActive_ ? "ON" : "off", dt);
+            glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        }
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+    }
 }
 
 // -----------------------------------------------------------------------

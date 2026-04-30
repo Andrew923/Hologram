@@ -13,7 +13,7 @@ struct Particle {
 
 layout(std430, binding = 0) buffer ParticleSSBO { Particle particles[]; };
 
-layout(binding = 1, rgba8) uniform image3D uVoxelGrid;
+layout(binding = 1, rgba8) uniform writeonly image3D uVoxelGrid;
 
 uniform uint  uParticleCount;
 uniform float uDt;
@@ -45,6 +45,9 @@ void main() {
 
     ivec3 head = ivec3(floor(pos));
     plot(head, col);
+    // Stack one voxel above so a thin settled layer still reads as volumetric
+    // on the rotor (single-voxel splats render as a 1px ring otherwise).
+    plot(head + ivec3(0, 1, 0), col);
 
     if (speed > V_TAIL) {
         vec3 tail = pos - 0.5 * v * uDt;

@@ -44,6 +44,8 @@ def parse_args():
                    help="Video capture device index (default: 0)")
     p.add_argument("--output", default="config/camera.json",
                    help="Output JSON path (default: config/camera.json)")
+    p.add_argument("--headless", action="store_true",
+                   help="Run without display (no cv2.imshow)")
     return p.parse_args()
 
 
@@ -71,8 +73,11 @@ def main():
     img_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"Camera opened: {img_w}x{img_h}  Board: {w}x{h}  "
           f"Square: {square_mm:.1f}mm  Target: {target_frames} frames")
-    print("Show the checkerboard to the camera. "
-          "Press 'q' to abort, 's' to skip a frame.")
+    if args.headless:
+        print("Headless mode: auto-capturing, no display.")
+    else:
+        print("Show the checkerboard to the camera. "
+              "Press 'q' to abort, 's' to skip a frame.")
 
     last_capture = 0.0
     while len(obj_points) < target_frames:
@@ -101,21 +106,23 @@ def main():
                 n = len(obj_points)
                 print(f"  Captured {n}/{target_frames}")
 
-        status = (f"Captured: {len(obj_points)}/{target_frames}  "
-                  f"{'[FOUND]' if found else '[searching...]'}")
-        cv2.putText(vis, status, (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        cv2.imshow("Calibration", vis)
+        if not args.headless:
+            status = (f"Captured: {len(obj_points)}/{target_frames}  "
+                      f"{'[FOUND]' if found else '[searching...]'}")
+            cv2.putText(vis, status, (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.imshow("Calibration", vis)
 
-        key = cv2.waitKey(30) & 0xFF
-        if key == ord('q'):
-            print("Aborted.")
-            cap.release()
-            cv2.destroyAllWindows()
-            sys.exit(1)
+            key = cv2.waitKey(30) & 0xFF
+            if key == ord('q'):
+                print("Aborted.")
+                cap.release()
+                cv2.destroyAllWindows()
+                sys.exit(1)
 
     cap.release()
-    cv2.destroyAllWindows()
+    if not args.headless:
+        cv2.destroyAllWindows()
 
     print(f"\nRunning calibrateCamera on {len(obj_points)} frames ...")
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
