@@ -42,6 +42,9 @@ set(APP_SOURCES
     src/application/WireframeApp.cpp
     src/application/FluidApp.cpp
     src/application/WaveApp.cpp
+    src/application/CellApp.cpp
+    src/application/FlowApp.cpp
+    src/application/PaintApp.cpp
     src/application/MorphApp.cpp
     src/application/TorusKnotApp.cpp
     src/application/ParticleApp.cpp
@@ -122,6 +125,20 @@ foreach(S ${FLIP_SHADERS})
     configure_file(src/shaders/flip/${S}
                    ${CMAKE_BINARY_DIR}/shaders/flip/${S} COPYONLY)
 endforeach()
+
+# Cell, Flow, Paint app shaders
+set(CELL_SHADERS step.glsl render.glsl seed.glsl)
+foreach(S ${CELL_SHADERS})
+    configure_file(src/shaders/cell/${S}
+                   ${CMAKE_BINARY_DIR}/shaders/cell/${S} COPYONLY)
+endforeach()
+set(FLOW_SHADERS step.glsl splat.glsl)
+foreach(S ${FLOW_SHADERS})
+    configure_file(src/shaders/flow/${S}
+                   ${CMAKE_BINARY_DIR}/shaders/flow/${S} COPYONLY)
+endforeach()
+configure_file(src/shaders/paint/step.glsl
+               ${CMAKE_BINARY_DIR}/shaders/paint/step.glsl COPYONLY)
 
 # Print build summary
 message(STATUS "OpenGL libraries : ${OPENGL_LIBRARIES}")
