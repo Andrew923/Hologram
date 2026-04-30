@@ -142,6 +142,97 @@ static JVal parseVal(const char* s, size_t len, size_t& p)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Minimal 4×4 column-major matrix (matches GLTF/OpenGL convention)
+// ─────────────────────────────────────────────────────────────────────────────
+
+struct Mat4 { float m[16]; };
+
+static Mat4 mat4Identity()
+{
+    Mat4 M{};
+    M.m[0] = M.m[5] = M.m[10] = M.m[15] = 1.0f;
+    return M;
+}
+
+static Mat4 mat4Mul(const Mat4& A, const Mat4& B)
+{
+    Mat4 C{};
+    for (int col = 0; col < 4; ++col)
+        for (int row = 0; row < 4; ++row) {
+            float s = 0.0f;
+            for (int k = 0; k < 4; ++k)
+                s += A.m[row + 4*k] * B.m[4*col + k];
+            C.m[4*col + row] = s;
+        }
+    return C;
+}
+
+// Transform a position (w=1) by M.
+static void mat4TransformPoint(const Mat4& M, float x, float y, float z,
+                                float& ox, float& oy, float& oz)
+{
+    ox = M.m[0]*x + M.m[4]*y + M.m[ 8]*z + M.m[12];
+    oy = M.m[1]*x + M.m[5]*y + M.m[ 9]*z + M.m[13];
+    oz = M.m[2]*x + M.m[6]*y + M.m[10]*z + M.m[14];
+}
+
+// Build the local-to-parent matrix for a GLTF node.
+static Mat4 nodeLocalMatrix(const JVal& node)
+{
+    const JVal& matArr = node.at("matrix");
+    if (matArr.isArr() && matArr.size() == 16) {
+        Mat4 M{};
+        for (int i = 0; i < 16; ++i)
+            M.m[i] = static_cast<float>(matArr.at(static_cast<size_t>(i)).asNum(
+                        (i == 0 || i == 5 || i == 10 || i == 15) ? 1.0 : 0.0));
+        return M;
+    }
+
+    float tx = 0.0f, ty = 0.0f, tz = 0.0f;
+    float qx = 0.0f, qy = 0.0f, qz = 0.0f, qw = 1.0f;
+    float sx = 1.0f, sy = 1.0f, sz = 1.0f;
+
+    const JVal& t = node.at("translation");
+    if (t.isArr() && t.size() >= 3) {
+        tx = static_cast<float>(t.at(0).asNum());
+        ty = static_cast<float>(t.at(1).asNum());
+        tz = static_cast<float>(t.at(2).asNum());
+    }
+    const JVal& r = node.at("rotation");
+    if (r.isArr() && r.size() >= 4) {
+        qx = static_cast<float>(r.at(0).asNum());
+        qy = static_cast<float>(r.at(1).asNum());
+        qz = static_cast<float>(r.at(2).asNum());
+        qw = static_cast<float>(r.at(3).asNum());
+    }
+    const JVal& s = node.at("scale");
+    if (s.isArr() && s.size() >= 3) {
+        sx = static_cast<float>(s.at(0).asNum());
+        sy = static_cast<float>(s.at(1).asNum());
+        sz = static_cast<float>(s.at(2).asNum());
+    }
+
+    // Rotation matrix from unit quaternion (GLTF [x,y,z,w]).
+    float r00 = 1.0f - 2.0f*(qy*qy + qz*qz);
+    float r10 = 2.0f*(qx*qy + qz*qw);
+    float r20 = 2.0f*(qx*qz - qy*qw);
+    float r01 = 2.0f*(qx*qy - qz*qw);
+    float r11 = 1.0f - 2.0f*(qx*qx + qz*qz);
+    float r21 = 2.0f*(qy*qz + qx*qw);
+    float r02 = 2.0f*(qx*qz + qy*qw);
+    float r12 = 2.0f*(qy*qz - qx*qw);
+    float r22 = 1.0f - 2.0f*(qx*qx + qy*qy);
+
+    // TRS = T * R * S  (scale first, then rotate, then translate).
+    Mat4 M{};
+    M.m[ 0] = r00*sx; M.m[ 1] = r10*sx; M.m[ 2] = r20*sx; M.m[ 3] = 0.0f;
+    M.m[ 4] = r01*sy; M.m[ 5] = r11*sy; M.m[ 6] = r21*sy; M.m[ 7] = 0.0f;
+    M.m[ 8] = r02*sz; M.m[ 9] = r12*sz; M.m[10] = r22*sz; M.m[11] = 0.0f;
+    M.m[12] = tx;     M.m[13] = ty;     M.m[14] = tz;     M.m[15] = 1.0f;
+    return M;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GLTF binary helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -337,7 +428,57 @@ bool loadGlb(const std::string& path, ObjMesh& mesh)
         return binChunk + offset;
     };
 
-    // ── 5. Process all meshes ─────────────────────────────────────────────────
+    // ── 5. Build mesh-index → accumulated-world-transform map ────────────────
+    // Traverse the node hierarchy to compute the world transform for every
+    // mesh instance.  If a mesh is referenced by multiple nodes it is loaded
+    // once per instance with the respective transform applied.
+    const JVal& nodesArr = root.at("nodes");
+
+    // meshTransforms[meshIdx] accumulates all world-space Mat4s that reference
+    // that mesh (one per node instance).
+    std::map<int, std::vector<Mat4>> meshTransforms;
+
+    if (nodesArr.isArr()) {
+        // parentOf[i] = index of node i's parent (-1 = root).
+        std::vector<int> parentOf(nodesArr.size(), -1);
+        for (size_t ni = 0; ni < nodesArr.size(); ++ni) {
+            const JVal& children = nodesArr.at(ni).at("children");
+            if (children.isArr())
+                for (size_t ci = 0; ci < children.size(); ++ci) {
+                    int ch = children.at(ci).asInt(-1);
+                    if (ch >= 0 && static_cast<size_t>(ch) < parentOf.size())
+                        parentOf[static_cast<size_t>(ch)] = static_cast<int>(ni);
+                }
+        }
+
+        // Compute world transform for each node (requires parents before children;
+        // GLTF allows arbitrary ordering so we iterate until stable).
+        std::vector<Mat4> worldXform(nodesArr.size(), mat4Identity());
+        std::vector<bool> done(nodesArr.size(), false);
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            for (size_t ni = 0; ni < nodesArr.size(); ++ni) {
+                if (done[ni]) continue;
+                int pi = parentOf[ni];
+                if (pi >= 0 && !done[static_cast<size_t>(pi)]) continue;
+                Mat4 local = nodeLocalMatrix(nodesArr.at(ni));
+                worldXform[ni] = (pi >= 0)
+                    ? mat4Mul(worldXform[static_cast<size_t>(pi)], local)
+                    : local;
+                done[ni] = true;
+                changed  = true;
+            }
+        }
+
+        for (size_t ni = 0; ni < nodesArr.size(); ++ni) {
+            int mi = nodesArr.at(ni).at("mesh").asInt(-1);
+            if (mi >= 0)
+                meshTransforms[mi].push_back(worldXform[ni]);
+        }
+    }
+
+    // ── 6. Process all meshes ─────────────────────────────────────────────────
     mesh.vertices.clear();
     mesh.edges.clear();
     mesh.colors.clear();
@@ -345,10 +486,11 @@ bool loadGlb(const std::string& path, ObjMesh& mesh)
     std::set<std::pair<int,int>> edgeSet;
     bool anyColors = false; // true if at least one primitive provided color data
 
-    for (size_t mi = 0; mi < meshesArr.size(); ++mi) {
-        const JVal& meshJ     = meshesArr.at(mi);
-        const JVal& primsArr  = meshJ.at("primitives");
-        if (!primsArr.isArr()) continue;
+    // Helper: load one mesh instance with a given world transform applied to positions.
+    auto loadMeshInstance = [&](size_t mi, const Mat4& xform) {
+        const JVal& meshJ    = meshesArr.at(mi);
+        const JVal& primsArr = meshJ.at("primitives");
+        if (!primsArr.isArr()) return;
 
         for (size_t pi = 0; pi < primsArr.size(); ++pi) {
             const JVal& prim  = primsArr.at(pi);
@@ -372,10 +514,12 @@ bool loadGlb(const std::string& path, ObjMesh& mesh)
             for (int vi = 0; vi < posCount; ++vi) {
                 const uint8_t* elem = posData + static_cast<size_t>(vi) * posStride;
                 int cs = compSize(posCompType);
-                float x = readFloat(elem + 0 * cs, posCompType, posNorm);
-                float y = readFloat(elem + 1 * cs, posCompType, posNorm);
-                float z = readFloat(elem + 2 * cs, posCompType, posNorm);
-                mesh.vertices.push_back({x, y, z});
+                float lx = readFloat(elem + 0 * cs, posCompType, posNorm);
+                float ly = readFloat(elem + 1 * cs, posCompType, posNorm);
+                float lz = readFloat(elem + 2 * cs, posCompType, posNorm);
+                float wx, wy, wz;
+                mat4TransformPoint(xform, lx, ly, lz, wx, wy, wz);
+                mesh.vertices.push_back({wx, wy, wz});
             }
 
             // ── Read vertex colors ────────────────────────────────────────────
@@ -470,9 +614,21 @@ bool loadGlb(const std::string& path, ObjMesh& mesh)
                 }
             }
         }
+    }; // end loadMeshInstance lambda
+
+    // Invoke once per (mesh, world-transform) pair from the node hierarchy.
+    // Fall back to an identity transform for any mesh not referenced by a node.
+    for (size_t mi = 0; mi < meshesArr.size(); ++mi) {
+        auto it = meshTransforms.find(static_cast<int>(mi));
+        if (it != meshTransforms.end()) {
+            for (const Mat4& xf : it->second)
+                loadMeshInstance(mi, xf);
+        } else {
+            loadMeshInstance(mi, mat4Identity());
+        }
     }
 
-    // ── 6. Finalise ───────────────────────────────────────────────────────────
+    // ── 7. Finalise ───────────────────────────────────────────────────────────
     // Ensure colors vector is either empty (no color data at all) or exactly
     // the same length as vertices (pad any trailing gap with default cyan).
     if (!mesh.colors.empty()) {

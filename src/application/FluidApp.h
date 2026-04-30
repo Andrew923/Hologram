@@ -45,6 +45,7 @@ private:
     void   bindGridImages_Clear();
     void   bindGridImages_P2G();
     void   bindGridImages_Normalize();
+    void   bindGridImages_Snapshot();
     void   bindGridImages_MarkCells();
     void   bindGridImages_Divergence();
     void   bindGridImages_Jacobi(GLuint pIn, GLuint pOut);
@@ -62,6 +63,7 @@ private:
     GLuint progRecycle_     = 0;
     GLuint progP2G_         = 0;
     GLuint progNormalize_   = 0;
+    GLuint progSnapshot_    = 0;
     GLuint progMark_        = 0;
     GLuint progDivergence_  = 0;
     GLuint progJacobi_      = 0;

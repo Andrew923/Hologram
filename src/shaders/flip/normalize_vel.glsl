@@ -1,7 +1,8 @@
 #version 450 core
 // Decode fixed-point P2G accumulators into float velocities, normalize by
-// weight, apply gravity tilt, and snapshot the post-gravity grid state for
-// the FLIP delta computed later in G2P.
+// weight, apply gravity tilt, and write the normalized grid velocities.
+// The post-gravity snapshot (for the FLIP delta) is taken by snapshot_vel.glsl
+// in a subsequent pass to stay within the 8-image-unit hardware limit.
 layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
 layout(binding = 0, r32i) uniform iimage3D aVelX;
@@ -13,11 +14,7 @@ layout(binding = 4, r32f) uniform image3D gVelX;
 layout(binding = 5, r32f) uniform image3D gVelY;
 layout(binding = 6, r32f) uniform image3D gVelZ;
 
-layout(binding = 7, r32f) uniform image3D gVelXSave;
-layout(binding = 8, r32f) uniform image3D gVelYSave;
-layout(binding = 9, r32f) uniform image3D gVelZSave;
-
-layout(binding = 10, r32f) uniform image3D gWeightF;
+layout(binding = 7, r32f) uniform image3D gWeightF;
 
 uniform vec3  uGravity;   // voxel/sec^2
 uniform float uDt;
@@ -44,9 +41,4 @@ void main() {
     imageStore(gVelX, c, vec4(v.x));
     imageStore(gVelY, c, vec4(v.y));
     imageStore(gVelZ, c, vec4(v.z));
-
-    // Snapshot AFTER gravity so the FLIP delta carries gravity-induced change.
-    imageStore(gVelXSave, c, vec4(v.x));
-    imageStore(gVelYSave, c, vec4(v.y));
-    imageStore(gVelZSave, c, vec4(v.z));
 }
