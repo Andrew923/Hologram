@@ -119,13 +119,16 @@ void WireframeApp::update(const SharedHandData& hand)
     menuWatcher_.update(hand);
 
     if (!hand.hand_detected) {
-        rotX_ += spinVelX_;
+        // Only the vertical-axis spin survives once the hand goes away —
+        // any X/Z angular velocity left over from the user's last gesture
+        // makes the model tumble, which reads as visual noise rather than
+        // intentional motion. Y velocity keeps its friction decay toward
+        // the default auto-spin so a flick still gets a slow ease-out.
+        spinVelX_ = 0.0f;
+        spinVelZ_ = 0.0f;
         rotY_ += spinVelY_;
-        rotZ_ += spinVelZ_;
-        spinVelX_ *= SPIN_FRICTION;
         spinVelY_ *= SPIN_FRICTION;
-        spinVelZ_ *= SPIN_FRICTION;
-        if (fabsf(spinVelX_) + fabsf(spinVelY_) + fabsf(spinVelZ_) < 0.001f)
+        if (fabsf(spinVelY_) < 0.001f)
             spinVelY_ = DEFAULT_SPIN_Y;
         return;
     }
