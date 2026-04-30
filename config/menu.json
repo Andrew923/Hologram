@@ -1,11 +1,22 @@
 {
     "entries": [
-        { "id": "cube",      "label": "Cube" },
-        { "id": "wireframe", "label": "Cake",  "obj": "models/cake.obj" },
-        { "id": "wireframe", "label": "House", "obj": "models/house.obj" },
-        { "id": "wireframe", "label": "Tie",      "obj": "models/tie_f.obj" },
-        { "id": "morph",     "label": "Morph" },
-        { "id": "corridor",  "label": "Corridor" },
-        { "id": "city",      "label": "City" }
+        { "id": "cube" },
+        { "id": "invaders" },
+        { "id": "torus" },
+        { "id": "morph" },
+        { "id": "flow" },
+        { "id": "wave" },
+        { "id": "fluid" },
+        { "id": "wireframe", "label": "CAKE", "obj": "models/cake.glb" },
+        { "id": "wireframe", "label": "FISH", "obj": "models/fish.glb" },
+        { "id": "wireframe", "label": "KITC", "obj": "models/kitchen.glb" },
+        { "id": "wireframe", "label": "HAND", "obj": "models/hand.glb" },
+        { "id": "wireframe", "label": "TIE_", "obj": "models/tie_f.obj" },
+        { "id": "wireframe", "label": "HELI", "obj": "models/helicopter.glb" },
+        { "id": "wireframe", "label": "RABB", "obj": "models/rabbit.glb" },
+        { "id": "wireframe", "label": "CAT",  "obj": "models/cat.glb" },
+        { "id": "wireframe", "label": "TRUC", "obj": "models/truck.glb" },
+        { "id": "wireframe", "label": "FERR", "obj": "models/ferrari.glb" },
+        { "id": "wireframe", "label": "TREE", "obj": "models/tree.glb" }
     ]
 }

@@ -51,6 +51,12 @@ private:
     // How long THUMBS_UP has been held (frames).
     int thumbsUpHeld_ = 0;
 
+    // Pinch edge detection — pinch (rising edge) snaps the carousel one
+    // slot forward. Cooldown prevents a single sustained pinch or jittery
+    // detection from firing rapidly.
+    bool pinchPrev_     = false;
+    int  pinchCooldown_ = 0;
+
     // Set by update() when the launch is triggered. main.cpp is expected
     // to consume this via requestedApp() and then the app is torn down;
     // no explicit clearing is needed (MenuApp is re-setup on re-entry).
