@@ -103,10 +103,14 @@ void ParticleApp::computeCursor(const SharedHandData& hand)
     cursorValid_ = false;
     if (!hand.hand_detected) return;
 
-    // Camera X → voxel X, camera Y → voxel Z (horizontal plane); Y fixed at midpoint
+    // Camera X → voxel X, camera Y → voxel Z (horizontal plane)
+    // Pinch distance controls cursor Y (vertical height).
     curX_ = clampf(hand.lm_x[8] * (float)VOXEL_W, X_MIN, X_MAX);
-    curY_ = 0.5f * (Y_MIN + Y_MAX);
     curZ_ = clampf(hand.lm_y[8] * (float)VOXEL_D, Z_MIN, Z_MAX);
+
+    float pinch = hypotf(hand.lm_x[4] - hand.lm_x[8],
+                         hand.lm_y[4] - hand.lm_y[8]);
+    curY_ = Y_MIN + clampf((pinch - 0.03f) / 0.22f, 0.0f, 1.0f) * (Y_MAX - Y_MIN);
     pushOutsideCoreRadius(curX_, curZ_);
     cursorValid_ = true;
 }
