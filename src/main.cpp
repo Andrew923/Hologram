@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <csignal>
+#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <string>
@@ -85,8 +86,9 @@ static void printAppList()
         "\nAvailable apps:\n"
         "  cube   hand   pong   morph   torus    particles\n"
         "  fluid  wave   cell   flow    paint    invaders\n"
-        "  menu   corridor       city   wireframe[:path/to.obj|.glb]\n"
-        "Type one and press Enter to swap. 'help' lists, 'quit' exits.\n");
+        "  menu   corridor       city   wireframe\n"
+        "  <name> — load models/<name>.glb or .obj into wireframe\n"
+        "Type one and press Enter to swap. 'help'/'ls' lists, 'quit' exits.\n");
 }
 
 // Stdin REPL: blocks on getline in a detached thread, parks the typed name
@@ -108,7 +110,7 @@ static void stdinReadLoop()
             if (g_dockerPid > 0) kill(g_dockerPid, SIGTERM);
             continue;
         }
-        if (line == "help" || line == "list" || line == "?") {
+        if (line == "help" || line == "list" || line == "ls" || line == "?") {
             printAppList();
             continue;
         }
@@ -294,8 +296,13 @@ int main(int argc, char* argv[])
     // If --obj was given on the CLI, pre-load the wireframe model.
     if (objPath[0] != '\0') wireframeApp.setModel(objPath);
 
-    // Resolve a string app name (including "wireframe:<path>") to an
-    // IApplication pointer. Returns nullptr if unrecognised.
+    // Resolve a string app name to an IApplication pointer. Recognises:
+    //   - the built-in app names (cube, hand, fluid, wave, ...)
+    //   - "wireframe:<path>" — explicit path form
+    //   - bare names that match a file in models/, e.g. "cat" → tries
+    //     "models/cat.glb" then "models/cat.obj" and routes to wireframe
+    //     if either exists.
+    // Returns nullptr if nothing matches.
     auto resolveApp = [&](const std::string& name) -> IApplication* {
         if (name == "cube")         return &cubeApp;
         if (name == "hand")         return &handApp;
@@ -310,13 +317,31 @@ int main(int argc, char* argv[])
         if (name == "torus")        return &torusApp;
         if (name == "particles")    return &particleApp;
         if (name == "menu")         return &menuApp;
+        if (name == "corridor")     return &corridorApp;
+        if (name == "city")         return &cityApp;
         if (name == "wireframe")    return &wireframeApp;
         if (name.rfind("wireframe:", 0) == 0) {
             wireframeApp.setModel(name.substr(10));
             return &wireframeApp;
         }
-        if (name == "corridor")  return &corridorApp;
-        if (name == "city")      return &cityApp;
+
+        // Bare-name model lookup: "<name>" → models/<name>.glb or .obj.
+        // Try both project-relative and CWD-relative so it works whether
+        // the binary is launched from the project root or from build/.
+        static const std::string root = getHologramRoot();
+        for (const char* ext : {".glb", ".obj"}) {
+            std::error_code ec;
+            std::string rel = "models/" + name + ext;
+            std::string abs = root + "/models/" + name + ext;
+            if (std::filesystem::exists(rel, ec)) {
+                wireframeApp.setModel(rel);
+                return &wireframeApp;
+            }
+            if (std::filesystem::exists(abs, ec)) {
+                wireframeApp.setModel(abs);
+                return &wireframeApp;
+            }
+        }
         return nullptr;
     };
 
