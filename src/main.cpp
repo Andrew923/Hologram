@@ -2,7 +2,10 @@
 #include <cstdlib>
 #include <cstring>
 #include <csignal>
+#include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 #include <unistd.h>
 #include <libgen.h>
@@ -63,11 +66,55 @@ static std::string getHologramRoot()
 static volatile sig_atomic_t g_running   = 1;
 static pid_t                 g_dockerPid = -1;
 
+// Stdin-driven app swap. Filled by stdinReadLoop(), drained by trySwapApp().
+static std::mutex g_inputMutex;
+static std::string g_pendingSwap;
+
 static void sigHandler(int /*sig*/)
 {
     g_running = 0;
     if (g_dockerPid > 0) {
         kill(g_dockerPid, SIGTERM);
+    }
+}
+
+// One-line summary of every app the resolver below knows about.
+static void printAppList()
+{
+    fprintf(stderr,
+        "\nAvailable apps:\n"
+        "  cube   hand   pong   morph   torus    particles\n"
+        "  fluid  wave   cell   flow    paint    invaders\n"
+        "  menu   corridor       city   wireframe[:path/to.obj|.glb]\n"
+        "Type one and press Enter to swap. 'help' lists, 'quit' exits.\n");
+}
+
+// Stdin REPL: blocks on getline in a detached thread, parks the typed name
+// in g_pendingSwap. The render loop drains it via trySwapApp on the next
+// frame. Recognises 'help'/'list'/'?' and 'quit'/'exit'/'q'.
+static void stdinReadLoop()
+{
+    std::string line;
+    while (g_running && std::getline(std::cin, line)) {
+        // Trim leading/trailing whitespace.
+        size_t b = line.find_first_not_of(" \t\r\n");
+        size_t e = line.find_last_not_of(" \t\r\n");
+        if (b == std::string::npos) continue;       // blank line — ignore
+        line = line.substr(b, e - b + 1);
+
+        if (line == "quit" || line == "exit" || line == "q") {
+            fprintf(stderr, "main: stdin requested quit\n");
+            g_running = 0;
+            if (g_dockerPid > 0) kill(g_dockerPid, SIGTERM);
+            continue;
+        }
+        if (line == "help" || line == "list" || line == "?") {
+            printAppList();
+            continue;
+        }
+
+        std::lock_guard<std::mutex> lock(g_inputMutex);
+        g_pendingSwap = line;
     }
 }
 
@@ -315,6 +362,11 @@ int main(int argc, char* argv[])
 
     fprintf(stderr, "main: entering main loop (app=%s)\n", appName);
 
+    // Detached stdin REPL — types a new app name to swap. Thread dies when
+    // the process exits (we don't bother joining it).
+    printAppList();
+    std::thread(stdinReadLoop).detach();
+
     // ----------------------------------------------------------------
     // Swap helper — invoked when requestedApp() returns non-null.
     // Tears down the current app, resolves the target, calls setup, and
@@ -322,13 +374,25 @@ int main(int argc, char* argv[])
     // unknown (stays on current app).
     // ----------------------------------------------------------------
     auto trySwapApp = [&]() -> bool {
-        const char* req = app->requestedApp();
-        if (!req) return false;
+        // Stdin REPL takes priority over the running app's own request so the
+        // user can always escape any app by typing a name.
+        std::string name;
+        {
+            std::lock_guard<std::mutex> lock(g_inputMutex);
+            if (!g_pendingSwap.empty()) {
+                name = std::move(g_pendingSwap);
+                g_pendingSwap.clear();
+            }
+        }
+        if (name.empty()) {
+            const char* req = app->requestedApp();
+            if (!req) return false;
+            name = req;
+        }
 
-        std::string name(req);
         IApplication* next = resolveApp(name);
         if (!next) {
-            fprintf(stderr, "main: swap to unknown '%s' ignored\n", req);
+            fprintf(stderr, "main: swap to unknown '%s' ignored\n", name.c_str());
             return false;
         }
 
