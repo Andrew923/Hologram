@@ -12,11 +12,12 @@
 // -----------------------------------------------------------------------
 // Tunables
 // -----------------------------------------------------------------------
-static constexpr float SPIN_MAX      = 0.06f;   // max spin velocity (rad/frame)
-static constexpr float SPIN_FRICTION = 0.995f;
-static constexpr float DEFAULT_SPIN  = 0.02f;
-static constexpr float MORPH_SMOOTH  = 0.04f;   // morphT smoothing rate
-static constexpr float SCALE_PX      = 22.0f;   // half-extent in voxel space
+static constexpr float SPIN_MAX        = 0.06f;   // max spin velocity (rad/frame)
+static constexpr float SPIN_FRICTION   = 0.995f;
+static constexpr float DEFAULT_SPIN    = 0.02f;
+static constexpr float MORPH_SMOOTH    = 0.04f;   // morphT smoothing rate
+static constexpr float SCALE_PX        = 22.0f;   // half-extent in voxel space
+static constexpr float POS_SMOOTH      = 0.1f;
 
 static constexpr float PINCH_MIN  = 0.03f;
 static constexpr float PINCH_SPAN = 0.22f;
@@ -177,6 +178,8 @@ void MorphApp::update(const SharedHandData& hand)
         spinVelY_ *= SPIN_FRICTION;
         if (fabsf(spinVelX_) + fabsf(spinVelY_) < 0.001f)
             spinVelY_ = DEFAULT_SPIN;
+        posX_ += (0.0f - posX_) * POS_SMOOTH;
+        posZ_ += (0.0f - posZ_) * POS_SMOOTH;
         return;
     }
 
@@ -193,6 +196,14 @@ void MorphApp::update(const SharedHandData& hand)
                              hand.lm_y[4] - hand.lm_y[8]);
     float targetMorphT = clampf((pinchDist - PINCH_MIN) / PINCH_SPAN, 0.0f, 1.0f);
     morphT_ += (targetMorphT - morphT_) * MORPH_SMOOTH;
+
+    // Palm center → shape position
+    float palmX  = (hand.lm_x[0] + hand.lm_x[9]) * 0.5f;
+    float palmY  = (hand.lm_y[0] + hand.lm_y[9]) * 0.5f;
+    float tgtPosX = clampf((palmX - 0.5f) * (float)VOXEL_W, -48.0f, 48.0f);
+    float tgtPosZ = clampf((palmY - 0.5f) * (float)VOXEL_D, -48.0f, 48.0f);
+    posX_ += (tgtPosX - posX_) * POS_SMOOTH;
+    posZ_ += (tgtPosZ - posZ_) * POS_SMOOTH;
 }
 
 void MorphApp::draw(Renderer& renderer)
@@ -225,9 +236,9 @@ void MorphApp::draw(Renderer& renderer)
     }
 
     // Rotate each slot position and project to voxel space
-    float cx = 0.5f * (VOXEL_W - 1);
+    float cx = 0.5f * (VOXEL_W - 1) + posX_;
     float cy = 0.5f * (VOXEL_H - 1);
-    float cz = 0.5f * (VOXEL_D - 1);
+    float cz = 0.5f * (VOXEL_D - 1) + posZ_;
 
     float cosX = cosf(rotX_), sinX = sinf(rotX_);
     float cosY = cosf(rotY_), sinY = sinf(rotY_);

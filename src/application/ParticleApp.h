@@ -7,17 +7,11 @@
 // ParticleApp — floating particles interacting with a red index-finger
 // cursor via generic inverse-square forces and local repulsion.
 //
-// Depth recovery:
-//   - If config/camera.json is present and valid, the cursor's Z is
-//     computed via pinhole unprojection using the user's wrist→index-MCP
-//     reference length.
-//   - Otherwise falls back to a hand-size proxy (same bone-pixel metric
-//     normalized against an empirical baseline).
-//
 // Gestures:
 //   POINT     → attract particles toward the cursor.
 //   FIST      → repel particles away from the cursor.
 //   PINCH     → spawn a particle at the cursor (rate-limited).
+//             Pinch distance also controls cursor Y (vertical height).
 //   THUMBS_UP → return to menu (via ReturnToMenuWatcher).
 // -----------------------------------------------------------------------
 class ParticleApp : public IApplication {

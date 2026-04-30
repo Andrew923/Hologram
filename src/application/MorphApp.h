@@ -26,4 +26,6 @@ private:
     float spinVelX_ = 0.0f;
     float spinVelY_ = 0.02f;
     float morphT_   = 0.0f;   // [0,1]: 0=tetrahedron, 1=dodecahedron
+    float posX_     = 0.0f;   // offset from grid center in voxel units
+    float posZ_     = 0.0f;
 };
