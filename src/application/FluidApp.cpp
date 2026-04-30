@@ -158,6 +158,7 @@ void FluidApp::setup(Renderer& /*renderer*/)
     ok &= loadProgram("shaders/flip/particle_recycle.glsl", progRecycle_);
     ok &= loadProgram("shaders/flip/p2g.glsl",              progP2G_);
     ok &= loadProgram("shaders/flip/normalize_vel.glsl",    progNormalize_);
+    ok &= loadProgram("shaders/flip/snapshot_vel.glsl",     progSnapshot_);
     ok &= loadProgram("shaders/flip/mark_cells.glsl",       progMark_);
     ok &= loadProgram("shaders/flip/divergence.glsl",       progDivergence_);
     ok &= loadProgram("shaders/flip/pressure_jacobi.glsl",  progJacobi_);
@@ -210,16 +211,15 @@ void FluidApp::update(const SharedHandData& hand)
 // -----------------------------------------------------------------------
 void FluidApp::bindGridImages_Clear()
 {
-    glBindImageTexture(0, texAVelX_,     0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
-    glBindImageTexture(1, texAVelY_,     0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
-    glBindImageTexture(2, texAVelZ_,     0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
-    glBindImageTexture(3, texAWeight_,   0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
-    glBindImageTexture(4, texVelX_,      0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(5, texVelY_,      0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(6, texVelZ_,      0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(7, texCellType_,  0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R8UI);
-    glBindImageTexture(8, texPressureA_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(9, texPressureB_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(0, texAVelX_,    0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
+    glBindImageTexture(1, texAVelY_,    0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
+    glBindImageTexture(2, texAVelZ_,    0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
+    glBindImageTexture(3, texAWeight_,  0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32I);
+    glBindImageTexture(4, texVelX_,     0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(5, texVelY_,     0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(6, texVelZ_,     0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(7, texCellType_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R8UI);
+    // Pressure textures zeroed via glClearTexImage (avoids exceeding 8-unit limit).
 }
 
 void FluidApp::bindGridImages_P2G()
@@ -232,17 +232,24 @@ void FluidApp::bindGridImages_P2G()
 
 void FluidApp::bindGridImages_Normalize()
 {
-    glBindImageTexture(0,  texAVelX_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
-    glBindImageTexture(1,  texAVelY_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
-    glBindImageTexture(2,  texAVelZ_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
-    glBindImageTexture(3,  texAWeight_,   0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
-    glBindImageTexture(4,  texVelX_,      0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(5,  texVelY_,      0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(6,  texVelZ_,      0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(7,  texVelXSave_,  0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(8,  texVelYSave_,  0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(9,  texVelZSave_,  0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
-    glBindImageTexture(10, texWeightF_,   0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(0, texAVelX_,   0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
+    glBindImageTexture(1, texAVelY_,   0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
+    glBindImageTexture(2, texAVelZ_,   0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
+    glBindImageTexture(3, texAWeight_, 0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32I);
+    glBindImageTexture(4, texVelX_,    0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(5, texVelY_,    0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(6, texVelZ_,    0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(7, texWeightF_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+}
+
+void FluidApp::bindGridImages_Snapshot()
+{
+    glBindImageTexture(0, texVelX_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
+    glBindImageTexture(1, texVelY_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
+    glBindImageTexture(2, texVelZ_,     0, GL_TRUE, 0, GL_READ_ONLY,  GL_R32F);
+    glBindImageTexture(3, texVelXSave_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(4, texVelYSave_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
+    glBindImageTexture(5, texVelZSave_, 0, GL_TRUE, 0, GL_WRITE_ONLY, GL_R32F);
 }
 
 void FluidApp::bindGridImages_MarkCells()
@@ -358,6 +365,10 @@ void FluidApp::draw(Renderer& renderer)
     barrier();
 
     // ----- B. Clear grid ---------------------------------------------------
+    // Zero pressure textures on the CPU to avoid exceeding 8 image unit limit.
+    const float kZero = 0.0f;
+    glClearTexImage(texPressureA_, 0, GL_RED, GL_FLOAT, &kZero);
+    glClearTexImage(texPressureB_, 0, GL_RED, GL_FLOAT, &kZero);
     glUseProgram(progClear_);
     bindGridImages_Clear();
     dispatchGrid();
@@ -370,11 +381,17 @@ void FluidApp::draw(Renderer& renderer)
     dispatchParticles();
     barrier();
 
-    // ----- D. Decode + normalize + apply gravity + snapshot ---------------
+    // ----- D. Decode + normalize + apply gravity --------------------------
     glUseProgram(progNormalize_);
     bindGridImages_Normalize();
     glUniform3f(uNormGravity_, gx, gy, gz);
     glUniform1f(uNormDt_, dt);
+    dispatchGrid();
+    barrier();
+
+    // ----- D2. Snapshot post-gravity velocity (for FLIP delta in G2P) -----
+    glUseProgram(progSnapshot_);
+    bindGridImages_Snapshot();
     dispatchGrid();
     barrier();
 
@@ -435,10 +452,10 @@ void FluidApp::draw(Renderer& renderer)
 void FluidApp::teardown(Renderer& /*renderer*/)
 {
     GLuint progs[] = {progClear_, progRecycle_, progP2G_, progNormalize_,
-                      progMark_, progDivergence_, progJacobi_, progSubGrad_,
-                      progG2P_, progSplat_};
+                      progSnapshot_, progMark_, progDivergence_, progJacobi_,
+                      progSubGrad_, progG2P_, progSplat_};
     for (GLuint p : progs) if (p) glDeleteProgram(p);
-    progClear_ = progRecycle_ = progP2G_ = progNormalize_ = 0;
+    progClear_ = progRecycle_ = progP2G_ = progNormalize_ = progSnapshot_ = 0;
     progMark_ = progDivergence_ = progJacobi_ = progSubGrad_ = 0;
     progG2P_  = progSplat_ = 0;
 
