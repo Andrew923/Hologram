@@ -41,7 +41,7 @@ public:
     }
 
     // ---- Tunables -------------------------------------------------------
-    static constexpr int   STARTING_LIVES = 3;
+    static constexpr int   STARTING_LIVES = 1;
     static constexpr int   MAX_DEBRIS     = 25;
 
     static constexpr float CENTER_X       = 63.5f;
@@ -56,7 +56,7 @@ public:
     static constexpr float BULLET_SPEED   = 80.0f;     // voxels/sec
     static constexpr float DEBRIS_SPEED   = 8.0f;
     static constexpr float POWERUP_SPEED  = 4.5f;
-    static constexpr float DEBRIS_SPAWN_INTERVAL  = 1.2f;
+    static constexpr float DEBRIS_SPAWN_INTERVAL  = 1.7f;
     static constexpr float POWERUP_SPAWN_INTERVAL = 12.0f;
     static constexpr float POWERUP_DURATION       = 8.0f;
     static constexpr float HIT_FLASH_DURATION     = 0.10f;
@@ -83,8 +83,6 @@ private:
     void drawBullet     (uint8_t* voxels, const Bullet& b);
     void drawPowerup    (uint8_t* voxels, const Powerup& p);
     void drawLaserBeam  (uint8_t* voxels);
-    void drawLives      (uint8_t* voxels);
-    void drawWeaponHUD  (uint8_t* voxels);
 
     ReturnToMenuWatcher menuWatcher_;
 

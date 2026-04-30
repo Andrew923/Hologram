@@ -143,7 +143,7 @@ void InvadersApp::update(const SharedHandData& hand)
             float dx = b.x - d.x;
             float dy = b.y - d.y;
             float dz = b.z - d.z;
-            float r  = (float)(d.hp + 2);    // hitbox grows with HP
+            float r  = (float)(d.hp * 2 + 2);  // hitbox scales with debris size
             if (dx*dx + dy*dy + dz*dz < r*r) {
                 d.hp--;
                 d.hitFlash = HIT_FLASH_DURATION;
@@ -294,8 +294,6 @@ void InvadersApp::draw(Renderer& renderer)
     for (const auto& d : debris_)   drawDebris(voxels, d);
     for (const auto& p : powerups_) drawPowerup(voxels, p);
     if (laserBeamTimer_ > 0.0f) drawLaserBeam(voxels);
-    drawLives(voxels);
-    if (currentWeapon_ != Weapon::NORMAL) drawWeaponHUD(voxels);
 
     menuWatcher_.drawLoadingIndicator(voxels);
     renderer.uploadVoxelBuffer(voxels);
@@ -355,7 +353,7 @@ void InvadersApp::drawDebris(uint8_t* voxels, const Debris& d)
     }
 
     int dx = (int)d.x, dy = (int)d.y, dz = (int)d.z;
-    int half = d.hp + 1;     // hp=1→half=2 (4³), hp=2→3 (6³), hp=3→4 (8³)
+    int half = (d.hp + 1) * 2;  // hp=1→half=4 (8³), hp=2→6 (12³), hp=3→8 (16³)
 
     int cx[8] = { dx-half, dx+half, dx+half, dx-half,
                   dx-half, dx+half, dx+half, dx-half };
@@ -401,32 +399,6 @@ void InvadersApp::drawLaserBeam(uint8_t* voxels)
         for (int dx = -1; dx <= 1; ++dx)
             for (int dz = -1; dz <= 1; ++dz)
                 voxpaint::paintVoxel(voxels, sx + dx, y, sz + dz, 0, 255, 255);
-    }
-}
-
-void InvadersApp::drawLives(uint8_t* voxels)
-{
-    int sx = (int)shipX_;
-    int sz = (int)shipZ_;
-    int by = (int)(SHIP_FLOOR_Y + SHIP_HEIGHT + 3);
-    for (int i = 0; i < lives_; ++i) {
-        voxpaint::paintVoxel(voxels, sx + (i - 1) * 2, by, sz, 0, 255, 255);
-    }
-}
-
-void InvadersApp::drawWeaponHUD(uint8_t* voxels)
-{
-    int sx = (int)shipX_;
-    int sz = (int)shipZ_;
-    int hy = (int)(SHIP_FLOOR_Y + SHIP_HEIGHT + 6);
-    if (currentWeapon_ == Weapon::LASER) {
-        // Mini pillar
-        for (int dy = 0; dy < 3; ++dy)
-            voxpaint::paintVoxel(voxels, sx, hy + dy, sz, 255, 255, 255);
-    } else if (currentWeapon_ == Weapon::SHOTGUN) {
-        // Mini horizontal bar
-        for (int dx = -2; dx <= 2; ++dx)
-            voxpaint::paintVoxel(voxels, sx + dx, hy, sz, 255, 255, 255);
     }
 }
 
