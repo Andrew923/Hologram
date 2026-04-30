@@ -47,6 +47,7 @@ static std::string getHologramRoot()
 #include "application/CellApp.h"
 #include "application/FlowApp.h"
 #include "application/PaintApp.h"
+#include "application/InvadersApp.h"
 #include "application/MorphApp.h"
 #include "application/TorusKnotApp.h"
 #include "application/ParticleApp.h"
@@ -126,7 +127,8 @@ static void usage(const char* prog)
     fprintf(stderr,
         "Usage: %s --app <name> --ip <pi_ip> --port <port>\n"
         "  --app         Application: cube, hand, pong, wireframe, fluid, wave,\n"
-        "                cell, flow, paint, torus, particles, menu  (default: cube)\n"
+        "                cell, flow, paint, invaders, torus, particles, menu\n"
+        "                (default: cube)\n"
         "  --ip          Target IP address of Raspberry Pi (default: 10.42.0.168)\n"
         "  --port        Target UDP port (default: 4210)\n"
         "  --obj         Path to .obj file (for wireframe app)\n"
@@ -234,6 +236,7 @@ int main(int argc, char* argv[])
     CellApp      cellApp;
     FlowApp      flowApp;
     PaintApp     paintApp;
+    InvadersApp  invadersApp;
     MorphApp     morphApp;
     TorusKnotApp torusApp;
     ParticleApp  particleApp;
@@ -255,6 +258,7 @@ int main(int argc, char* argv[])
         if (name == "cell")         return &cellApp;
         if (name == "flow")         return &flowApp;
         if (name == "paint")        return &paintApp;
+        if (name == "invaders")     return &invadersApp;
         if (name == "morph")        return &morphApp;
         if (name == "torus")        return &torusApp;
         if (name == "particles")    return &particleApp;

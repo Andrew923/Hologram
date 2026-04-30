@@ -45,6 +45,7 @@ set(APP_SOURCES
     src/application/CellApp.cpp
     src/application/FlowApp.cpp
     src/application/PaintApp.cpp
+    src/application/InvadersApp.cpp
     src/application/MorphApp.cpp
     src/application/TorusKnotApp.cpp
     src/application/ParticleApp.cpp
