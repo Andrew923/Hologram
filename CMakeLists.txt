@@ -100,6 +100,17 @@ add_executable(test_shm_reader src/test_shm_reader.cpp)
 target_include_directories(test_shm_reader PRIVATE ${CMAKE_SOURCE_DIR})
 target_link_libraries(test_shm_reader PRIVATE rt)
 
+# --- gesture_test: standalone gesture-detection tester (no GL deps) ---
+# Spawns the same docker hand-tracker sidecar as hologram, prints
+# detected gestures to stdout. Useful for verifying gesture detection
+# without launching the full display pipeline.
+add_executable(gesture_test
+    src/gesture_test.cpp
+    src/engine/InputBridge.cpp
+)
+target_include_directories(gesture_test PRIVATE ${CMAKE_SOURCE_DIR})
+target_link_libraries(gesture_test PRIVATE rt Threads::Threads)
+
 # --- Copy shaders next to binary ---
 configure_file(src/shaders/slice_compute.glsl
                ${CMAKE_BINARY_DIR}/shaders/slice_compute.glsl COPYONLY)
