@@ -87,7 +87,9 @@ static void printAppList()
         "  cube   hand   pong   morph   torus    particles\n"
         "  fluid  wave   cell   flow    paint    invaders\n"
         "  menu   corridor       city   wireframe\n"
-        "  <name> — load models/<name>.glb or .obj into wireframe\n"
+        "  <name>           load models/<name>.glb or .obj (wireframe)\n"
+        "  <name>.glb|.obj   explicit filename — overrides any built-in\n"
+        "                    name match (e.g. 'hand.glb' vs 'hand')\n"
         "Type one and press Enter to swap. 'help'/'ls' lists, 'quit' exits.\n");
 }
 
@@ -297,13 +299,45 @@ int main(int argc, char* argv[])
     if (objPath[0] != '\0') wireframeApp.setModel(objPath);
 
     // Resolve a string app name to an IApplication pointer. Recognises:
+    //   - "<name>.glb" / "<name>.obj" — explicit filename form. Looked up
+    //     in models/ (or as an absolute path); takes priority over
+    //     built-in names so "hand.glb" reaches WireframeApp instead of
+    //     the built-in HandApp.
     //   - the built-in app names (cube, hand, fluid, wave, ...)
-    //   - "wireframe:<path>" — explicit path form
+    //   - "wireframe:<path>" — explicit path form (legacy)
     //   - bare names that match a file in models/, e.g. "cat" → tries
     //     "models/cat.glb" then "models/cat.obj" and routes to wireframe
     //     if either exists.
     // Returns nullptr if nothing matches.
     auto resolveApp = [&](const std::string& name) -> IApplication* {
+        // ---- Explicit filename (foo.glb / foo.obj, case-insensitive) ----
+        auto endsWithCI = [&](const char* suffix) {
+            size_t n = std::strlen(suffix);
+            if (name.size() < n) return false;
+            for (size_t i = 0; i < n; ++i) {
+                char a = name[name.size() - n + i];
+                char b = suffix[i];
+                if (tolower((unsigned char)a) != tolower((unsigned char)b)) return false;
+            }
+            return true;
+        };
+        if (endsWithCI(".glb") || endsWithCI(".obj")) {
+            static const std::string root = getHologramRoot();
+            std::error_code ec;
+            // Try cwd-relative, project-models-relative, then literal path
+            // (so absolute paths like /tmp/foo.glb work too).
+            for (const std::string& candidate : {
+                    std::string("models/") + name,
+                    root + "/models/" + name,
+                    name }) {
+                if (std::filesystem::exists(candidate, ec)) {
+                    wireframeApp.setModel(candidate);
+                    return &wireframeApp;
+                }
+            }
+            return nullptr;     // explicit filename given but not found
+        }
+
         if (name == "cube")         return &cubeApp;
         if (name == "hand")         return &handApp;
         if (name == "pong")         return &pongApp;
@@ -326,8 +360,6 @@ int main(int argc, char* argv[])
         }
 
         // Bare-name model lookup: "<name>" → models/<name>.glb or .obj.
-        // Try both project-relative and CWD-relative so it works whether
-        // the binary is launched from the project root or from build/.
         static const std::string root = getHologramRoot();
         for (const char* ext : {".glb", ".obj"}) {
             std::error_code ec;
