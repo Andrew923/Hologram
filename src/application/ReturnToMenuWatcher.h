@@ -1,7 +1,7 @@
 #pragma once
 // -----------------------------------------------------------------------
 // ReturnToMenuWatcher — small helper that flags "return to menu" after
-// a sustained THUMBS_UP gesture.
+// a sustained FIVE_FINGERS gesture (open palm, fingers splayed).
 //
 // Usage inside an IApplication:
 //   ReturnToMenuWatcher menuWatcher_;
@@ -14,7 +14,7 @@
 //       return menuWatcher_.shouldReturn() ? "menu" : nullptr;
 //   }
 //
-// The watcher only triggers after THUMBS_UP has been held for
+// The watcher only triggers after FIVE_FINGERS has been held for
 // HOLD_FRAMES consecutive frames, which prevents a single brief gesture
 // from bouncing between menu and app. After triggering it auto-resets
 // so the next menu entry press isn't instantly cancelled by the same
@@ -28,13 +28,13 @@ public:
     // Match menu launch hold time so entering/leaving app feels symmetric.
     static constexpr int HOLD_FRAMES = 60;
     // After triggering, ignore gestures until the user goes through
-    // any non-THUMBS_UP state (prevents accidental double-trigger).
+    // any non-FIVE_FINGERS state (prevents accidental double-trigger).
     static constexpr int COOLDOWN_FRAMES = 60;
 
     void update(const SharedHandData& hand) {
         if (triggered_) {
             // Already flagged for this "press" — wait for release.
-            if (detectGesture(hand) != Gesture::THUMBS_UP) {
+            if (detectGesture(hand) != Gesture::FIVE_FINGERS) {
                 cooldown_--;
                 if (cooldown_ <= 0) {
                     triggered_ = false;
@@ -46,7 +46,7 @@ public:
             return;
         }
 
-        if (detectGesture(hand) == Gesture::THUMBS_UP) {
+        if (detectGesture(hand) == Gesture::FIVE_FINGERS) {
             heldFrames_++;
             if (heldFrames_ >= HOLD_FRAMES) {
                 triggered_ = true;

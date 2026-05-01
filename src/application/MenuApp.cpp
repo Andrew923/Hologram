@@ -18,14 +18,17 @@
 // -----------------------------------------------------------------------
 // Tunables
 // -----------------------------------------------------------------------
-static constexpr int   THUMBS_UP_LAUNCH_FRAMES = 60;
-static constexpr float SMOOTHING       = 0.35f;
-static constexpr float SPEED_SCALE     = 0.80f;
-static constexpr float ANGULAR_DECAY   = 0.90f;
+static constexpr int   LAUNCH_HOLD_FRAMES = 60;            // ~1.5 s at 40fps
 static constexpr float CAROUSEL_RADIUS = 0.70f;
 static constexpr float ICON_SIZE_HIGHLIGHT = 0.28f;
-static constexpr int   UNSELECTED_CUBE_HALF = 2;          // voxels
-static constexpr int   PINCH_COOLDOWN_FRAMES = 8;          // anti-double-fire
+static constexpr int   UNSELECTED_CUBE_HALF = 2;            // voxels
+static constexpr int   PINCH_COOLDOWN_FRAMES = 12;          // ~0.4 s at 30fps
+static constexpr float GLIDE_RATE      = 0.20f;             // per-frame ease toward targetAngle_
+
+// Where on the carousel ring the "selected" position sits, in radians
+// around the Y axis. 0 = +Z (front), π/2 = +X (right), π = back,
+// -π/2 = left. Tweak if the rotor's user-facing direction differs.
+static constexpr float SELECTION_ANGLE = (float)M_PI / 2.0f;
 
 // -----------------------------------------------------------------------
 // Icon kinds — keep in sync with iconKindForId() and drawIcon().
@@ -243,11 +246,12 @@ void MenuApp::loadEntries(const std::string& /*ignored*/)
 void MenuApp::setup(Renderer& /*renderer*/)
 {
     loadEntries("config/menu.json");
-    carouselAngle_     = 0.0f;
-    angularVel_        = 0.0f;
-    thumbsUpHeld_      = 0;
-    pinchPrev_         = false;
-    pinchCooldown_     = 0;
+    // Start with item 0 at the selection position.
+    carouselAngle_ = SELECTION_ANGLE;
+    targetAngle_   = SELECTION_ANGLE;
+    launchHeld_    = 0;
+    pinchPrev_     = false;
+    pinchCooldown_ = 0;
     pendingLaunch_.clear();
 }
 
@@ -258,7 +262,10 @@ int MenuApp::selectedIndex() const
     float best = 1e9f;
     int   idx  = 0;
     for (int i = 0; i < N; ++i) {
-        float a = wrapAngle(2.0f * (float)M_PI * i / N + carouselAngle_);
+        // Item i sits at placement angle 2π i/N + carouselAngle_; the
+        // selected item is whichever is closest to SELECTION_ANGLE.
+        float a = wrapAngle(2.0f * (float)M_PI * i / N + carouselAngle_
+                            - SELECTION_ANGLE);
         float d = fabsf(a);
         if (d < best) { best = d; idx = i; }
     }
@@ -272,22 +279,23 @@ void MenuApp::update(const SharedHandData& hand)
 
     if (pinchCooldown_ > 0) --pinchCooldown_;
 
+    // Always glide toward the target — even after the hand leaves, an
+    // in-progress scroll completes smoothly.
+    carouselAngle_ += (targetAngle_ - carouselAngle_) * GLIDE_RATE;
+
     if (!hand.hand_detected) {
-        angularVel_ *= ANGULAR_DECAY;
-        carouselAngle_ += angularVel_;
-        thumbsUpHeld_ = 0;
-        pinchPrev_    = false;
+        launchHeld_ = 0;
+        pinchPrev_  = false;
         return;
     }
 
     Gesture g = detectGesture(hand);
 
-    // THUMBS_UP — freeze velocity, run launch hold counter.
-    if (g == Gesture::THUMBS_UP) {
-        angularVel_ = 0.0f;
-        pinchPrev_  = false;
-        thumbsUpHeld_++;
-        if (thumbsUpHeld_ >= THUMBS_UP_LAUNCH_FRAMES) {
+    // FIVE_FINGERS (open palm, splayed) — hold to launch the centered item.
+    if (g == Gesture::FIVE_FINGERS) {
+        pinchPrev_ = false;
+        launchHeld_++;
+        if (launchHeld_ >= LAUNCH_HOLD_FRAMES) {
             const Entry& sel = entries_[selectedIndex()];
             if (sel.id == "wireframe" && !sel.obj.empty())
                 pendingLaunch_ = "wireframe:" + sel.obj;
@@ -297,25 +305,18 @@ void MenuApp::update(const SharedHandData& hand)
         }
         return;
     }
-    thumbsUpHeld_ = 0;
+    launchHeld_ = 0;
 
-    // PINCH (rising edge) — snap to next item, ignore finger-drag this frame.
+    // PINCH (rising edge, after cooldown) — shift target one slot forward.
+    // The lerp above eases carouselAngle_ toward the new target over a
+    // few frames so the scroll reads as motion rather than a snap.
     bool pinching = (g == Gesture::PINCH);
     if (pinching && !pinchPrev_ && pinchCooldown_ == 0) {
         int N = (int)entries_.size();
-        carouselAngle_ -= 2.0f * (float)M_PI / (float)N;
-        angularVel_     = 0.0f;
-        pinchCooldown_  = PINCH_COOLDOWN_FRAMES;
+        targetAngle_  -= 2.0f * (float)M_PI / (float)N;
+        pinchCooldown_ = PINCH_COOLDOWN_FRAMES;
     }
     pinchPrev_ = pinching;
-
-    if (!pinching) {
-        // Normal scroll: index-tip X drives angular velocity.
-        float offset = hand.lm_x[8] - 0.5f;
-        float target = -offset * SPEED_SCALE;
-        angularVel_ += (target - angularVel_) * SMOOTHING;
-    }
-    carouselAngle_ += angularVel_;
 }
 
 // =======================================================================
@@ -625,9 +626,10 @@ void MenuApp::draw(Renderer& renderer)
         }
     }
 
-    // Rising blue fill on the selected item's bbox while THUMBS_UP is held.
-    if (thumbsUpHeld_ > 0) {
-        float progress = clampf((float)thumbsUpHeld_ / (float)THUMBS_UP_LAUNCH_FRAMES,
+    // Rising blue fill on the selected item's bbox while the launch
+    // gesture is held. Uses the same placement math as the icon loop.
+    if (launchHeld_ > 0) {
+        float progress = clampf((float)launchHeld_ / (float)LAUNCH_HOLD_FRAMES,
                                 0.0f, 1.0f);
         int threshold = (int)(progress * VOXEL_H);
 

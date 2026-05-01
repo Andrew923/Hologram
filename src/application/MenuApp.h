@@ -11,10 +11,11 @@
 // file is absent, a default list (cube, torus, particles) is used.
 //
 // Interaction:
-//   POINT (index finger extended, horizontal direction) → spin carousel.
-//   THUMBS_UP (held ~0.5s) → launch the centered item; a blue floor rises
-//     from the bottom while held as a visual progress indicator. The launch
-//     target is exposed via requestedApp(); main.cpp performs the swap.
+//   PINCH (rising edge) → smoothly scroll one slot forward.
+//   FIVE_FINGERS (open palm, fingers splayed, held ~1.5s) → launch the
+//     centered item; a blue floor rises from the bottom while held as a
+//     visual progress indicator. Launch target is exposed via
+//     requestedApp(); main.cpp performs the swap.
 //
 // For wireframe entries, requestedApp() returns "wireframe:<obj-path>"
 // so main.cpp can call WireframeApp::setModel() before setup().
@@ -43,13 +44,13 @@ private:
 
     std::vector<Entry> entries_;
 
-    // Carousel rotation state (radians). Larger carouselAngle_ moves the
-    // selected index one way.
-    float carouselAngle_  = 0.0f;
-    float angularVel_     = 0.0f;
+    // Carousel rotation state (radians). Each frame carouselAngle_ eases
+    // toward targetAngle_; pinch shifts the target by -2π/N.
+    float carouselAngle_ = 0.0f;
+    float targetAngle_   = 0.0f;
 
-    // How long THUMBS_UP has been held (frames).
-    int thumbsUpHeld_ = 0;
+    // How long the launch gesture has been held (frames).
+    int launchHeld_ = 0;
 
     // Pinch edge detection — pinch (rising edge) snaps the carousel one
     // slot forward. Cooldown prevents a single sustained pinch or jittery
