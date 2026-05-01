@@ -1,11 +1,10 @@
 #include "TorusKnotApp.h"
 #include "VoxelPaint.h"
-#include "DisplayConstraints.h"
 #include "GestureDetector.h"
 #include "../engine/Renderer.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <algorithm>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -15,32 +14,47 @@
 // Tunables
 // -----------------------------------------------------------------------
 static constexpr int   N_STEPS = 320;
-static constexpr int   KNOT_P  = 2;
-static constexpr int   KNOT_Q  = 3;
-static constexpr float TORUS_MAJOR = 0.62f;
-static constexpr float TORUS_MINOR = 0.22f;
-static constexpr float HEIGHT_GAIN = 0.95f;
-static constexpr float TUBE_RADIUS_BASE_PX = 3.0f;
-static constexpr float TUBE_RADIUS_WOBBLE_PX = 0.0f;
 
-// Keep the knot displaced from the axis dead-core with extra margin for thickness.
-static constexpr float KNOT_EXTRA_Z_MARGIN_PX = 12.0f;
-static constexpr float Z_BIAS_PX = CORE_SAFE_RADIUS_PX + KNOT_EXTRA_Z_MARGIN_PX;
+static constexpr float TORUS_MAJOR     = 0.62f;
+static constexpr float TUBE_RADIUS_PX  = 3.0f;
 
-static constexpr float SCALE_MIN_PX = 10.0f;
-static constexpr float SCALE_MAX_PX = 26.0f;
-static constexpr float SCALE_MIN = SCALE_MIN_PX / (VOXEL_H - 1);
-static constexpr float SCALE_MAX = SCALE_MAX_PX / (VOXEL_H - 1);
+// Auto-spin: ~1 rev per 7 s at 30 fps.
+static constexpr float AUTO_SPIN_VEL   = 0.03f;
 
-static constexpr float SMOOTHING         = 0.15f;
-static constexpr float ANGULAR_GAIN      = 0.12f;
-static constexpr float ANGULAR_VEL_DECAY = 0.92f;
+// How fast the rendered parameters glide toward the finger-driven targets.
+static constexpr float PARAM_SMOOTHING = 0.15f;
 
-static const uint8_t KNOT_A_RGB[3] = {255, 60, 220};
-static const uint8_t KNOT_B_RGB[3] = {0, 220, 255};
+// Per-finger parameter ranges.
+static constexpr int   P_MIN = 1, P_MAX = 5;
+static constexpr int   Q_MIN = 1, Q_MAX = 5;
+static constexpr float TUBE_MIN = 0.06f, TUBE_MAX = 0.36f;
+static constexpr float HEIGHT_MIN = 0.20f, HEIGHT_MAX = 1.60f;
+
+// Voxel-space scale (constant — the bowl already frames the knot).
+static constexpr float SCALE_PX = 18.0f;
+static constexpr float SCALE    = SCALE_PX / (VOXEL_H - 1);
+
+static const uint8_t KNOT_A_RGB[3] = {255,  60, 220};
+static const uint8_t KNOT_B_RGB[3] = {  0, 220, 255};
 
 static inline float clampf(float x, float lo, float hi) {
     return x < lo ? lo : (x > hi ? hi : x);
+}
+
+static inline float lerp(float a, float b, float t) {
+    return a + (b - a) * t;
+}
+
+// Continuous "how extended" value for a non-thumb finger.
+// Averages the cosines at PIP and DIP, remaps from [-1,1] to [0,1] and
+// clamps. 0 ≈ fully curled (folded back), 1 ≈ perfectly straight.
+static float fingerExtCont(const SharedHandData& h,
+                           int mcp, int pip, int dip, int tip)
+{
+    float c1 = gd_boneCos(h, mcp, pip, dip);
+    float c2 = gd_boneCos(h, pip, dip, tip);
+    float t  = (c1 + c2) * 0.5f;
+    return clampf((t + 1.0f) * 0.5f, 0.0f, 1.0f);
 }
 
 void TorusKnotApp::setup(Renderer& /*renderer*/)
@@ -52,81 +66,77 @@ void TorusKnotApp::update(const SharedHandData& hand)
 {
     menuWatcher_.update(hand);
 
-    if (!hand.hand_detected) {
-        angularVel_ *= ANGULAR_VEL_DECAY;
-        phase_ += angularVel_;
-        return;
-    }
+    // Auto-spin runs regardless of whether the hand is present.
+    phase_ += AUTO_SPIN_VEL;
 
-    Gesture g = detectGesture(hand);
+    if (!hand.hand_detected) return;
 
-    if (g == Gesture::PEACE) {
-        float dirX = hand.lm_x[8] - hand.lm_x[5];
-        dirX = clampf(dirX, -0.5f, 0.5f);
-        float target = dirX * 2.0f * ANGULAR_GAIN;
-        angularVel_ += (target - angularVel_) * SMOOTHING;
-    } else {
-        angularVel_ *= ANGULAR_VEL_DECAY;
-    }
+    float tIndex  = fingerExtCont(hand, 5,  6,  7,  8);
+    float tMiddle = fingerExtCont(hand, 9,  10, 11, 12);
+    float tRing   = fingerExtCont(hand, 13, 14, 15, 16);
+    float tPinky  = fingerExtCont(hand, 17, 18, 19, 20);
 
-    if (g == Gesture::PINCH) {
-        float pinch = hypotf(hand.lm_x[4] - hand.lm_x[8],
-                             hand.lm_y[4] - hand.lm_y[8]);
-        float tgtScale = SCALE_MIN
-            + clampf((pinch - 0.03f) / 0.22f, 0.0f, 1.0f)
-              * (SCALE_MAX - SCALE_MIN);
-        scale_ += (tgtScale - scale_) * SMOOTHING;
-        scale_  = clampf(scale_, SCALE_MIN, SCALE_MAX);
-    }
+    float tgtP    = (float)P_MIN + tIndex  * (float)(P_MAX - P_MIN);
+    float tgtQ    = (float)Q_MIN + tMiddle * (float)(Q_MAX - Q_MIN);
+    float tgtTube = TUBE_MIN     + tRing   * (TUBE_MAX   - TUBE_MIN);
+    float tgtH    = HEIGHT_MIN   + tPinky  * (HEIGHT_MAX - HEIGHT_MIN);
 
-    phase_ += angularVel_;
+    pCont_      = lerp(pCont_,      tgtP,    PARAM_SMOOTHING);
+    qCont_      = lerp(qCont_,      tgtQ,    PARAM_SMOOTHING);
+    tubeRadius_ = lerp(tubeRadius_, tgtTube, PARAM_SMOOTHING);
+    heightGain_ = lerp(heightGain_, tgtH,    PARAM_SMOOTHING);
 }
 
 void TorusKnotApp::draw(Renderer& renderer)
 {
     static uint8_t voxels[VOXEL_BYTES];
-    memset(voxels, 0, sizeof(voxels));
+    std::memset(voxels, 0, sizeof(voxels));
+
+    // P/Q must be integers for the knot to close; snap from the smoothed
+    // continuous values.
+    const int P = std::max(P_MIN, std::min(P_MAX, (int)std::round(pCont_)));
+    const int Q = std::max(Q_MIN, std::min(Q_MAX, (int)std::round(qCont_)));
+    const float r = tubeRadius_;
+    const float h = heightGain_;
 
     int prevX = 0, prevY = 0, prevZ = 0;
     bool havePrev = false;
+
+    const float cp = std::cos(phase_);
+    const float sp = std::sin(phase_);
 
     for (int i = 0; i <= N_STEPS; ++i) {
         float u = (float)i / (float)N_STEPS;
         float t = u * 2.0f * (float)M_PI;
 
-        float cqt = cosf((float)KNOT_Q * t);
-        float sqt = sinf((float)KNOT_Q * t);
-        float cpt = cosf((float)KNOT_P * t);
-        float spt = sinf((float)KNOT_P * t);
+        float cqt = std::cos((float)Q * t);
+        float sqt = std::sin((float)Q * t);
+        float cpt = std::cos((float)P * t);
+        float spt = std::sin((float)P * t);
 
-        float ring = TORUS_MAJOR + TORUS_MINOR * cqt;
+        float ring = TORUS_MAJOR + r * cqt;
         float x = ring * cpt;
-        float y = HEIGHT_GAIN * TORUS_MINOR * sqt;
+        float y = h * r * sqt;
         float z = ring * spt;
 
-        float cp = cosf(phase_);
-        float sp = sinf(phase_);
+        // Auto-spin around the vertical (Y) axis.
         float xr =  cp * x - sp * z;
         float zr =  sp * x + cp * z;
 
-        int vx = (int)roundf((xr * scale_ + 1.0f) * 0.5f * (VOXEL_W - 1));
-        int vy = (int)roundf((y  * scale_ + 1.0f) * 0.5f * (VOXEL_H - 1));
-        int vz = (int)roundf((zr * scale_ + 1.0f) * 0.5f * (VOXEL_D - 1) + Z_BIAS_PX);
+        int vx = (int)std::round((xr * SCALE + 1.0f) * 0.5f * (VOXEL_W - 1));
+        int vy = (int)std::round((y  * SCALE + 1.0f) * 0.5f * (VOXEL_H - 1));
+        int vz = (int)std::round((zr * SCALE + 1.0f) * 0.5f * (VOXEL_D - 1));
         vx = std::max(0, std::min(VOXEL_W - 1, vx));
         vy = std::max(0, std::min(VOXEL_H - 1, vy));
         vz = std::max(0, std::min(VOXEL_D - 1, vz));
 
+        const uint8_t* col = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
         if (havePrev) {
-            const uint8_t* knotColor = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
             voxpaint::paint3DLine(voxels, prevX, prevY, prevZ, vx, vy, vz,
-                                  knotColor[0], knotColor[1], knotColor[2]);
+                                  col[0], col[1], col[2]);
         }
-
-        const uint8_t* knotColor = (i & 1) ? KNOT_A_RGB : KNOT_B_RGB;
-        float tubeR = TUBE_RADIUS_BASE_PX
-                    + TUBE_RADIUS_WOBBLE_PX * (0.5f + 0.5f * sinf(phase_ + 3.0f * t));
-        voxpaint::paintSphere(voxels, vx, vy, vz, tubeR,
-                              knotColor[0], knotColor[1], knotColor[2]);
+        voxpaint::paintSphere(voxels, vx, vy, vz, TUBE_RADIUS_PX,
+                              col[0], col[1], col[2]);
 
         prevX = vx; prevY = vy; prevZ = vz;
         havePrev = true;
