@@ -516,11 +516,13 @@ int main(int argc, char* argv[])
             slicer.kickDispatch(renderer.getVoxelTextureID());
             uint64_t tAfterKick = nowUs();
 
+            // Tight per-slice send. The Pi handles the burst fine — its
+            // udp_inter_packet_us p99 was 1.6 ms even with the previous
+            // 100 µs sleep removed, well under one slice dwell.
             uint64_t netMax = 0;
             for (int i = 0; i < SLICE_COUNT; ++i) {
                 uint64_t ts = nowUs();
                 network.sendSlice((uint8_t)i, &sliceBuffer->data[i][0][0][0]);
-                usleep(100);
                 uint64_t elapsed = nowUs() - ts;
                 if (elapsed > netMax) netMax = elapsed;
             }

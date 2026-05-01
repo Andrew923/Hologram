@@ -57,6 +57,18 @@ bool WireframeApp::setModel(const std::string& objPath)
     }
 
     computeBBox();
+
+    // Reset orientation/scale/spin to defaults so loading a new model
+    // mid-run feels like restarting the binary fresh — same starting
+    // pose regardless of what the user was doing with the previous one.
+    rotX_     = 0.0f;
+    rotY_     = 0.0f;
+    rotZ_     = 0.0f;
+    scale_    = 1.0f;
+    spinVelX_ = 0.0f;
+    spinVelY_ = 0.02f;     // matches DEFAULT_SPIN_Y in the .cpp tunables
+    spinVelZ_ = 0.0f;
+
     return true;
 }
 
