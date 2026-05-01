@@ -114,13 +114,13 @@ static void printDetection(double tSec, const SharedHandData& hand, Gesture g)
         fflush(stdout);
         return;
     }
-    // Match GestureDetector's inverted-Y convention (camera is mounted
-    // upside-down on this rig; "extended" means tip.y > pip.y).
-    bool tu = hand.lm_y[4]  > hand.lm_y[2];
-    bool iu = hand.lm_y[8]  > hand.lm_y[6];
-    bool mu = hand.lm_y[12] > hand.lm_y[10];
-    bool ru = hand.lm_y[16] > hand.lm_y[14];
-    bool pu = hand.lm_y[20] > hand.lm_y[18];
+    // Use the same rotation-invariant helpers the detector uses, so the
+    // flags we print are exactly what classified the gesture.
+    bool tu = gd_thumbExtended(hand);
+    bool iu = gd_fingerExtended(hand, 5,  6,  8);
+    bool mu = gd_fingerExtended(hand, 9,  10, 12);
+    bool ru = gd_fingerExtended(hand, 13, 14, 16);
+    bool pu = gd_fingerExtended(hand, 17, 18, 20);
     float pd = std::hypot(hand.lm_x[4] - hand.lm_x[8],
                           hand.lm_y[4] - hand.lm_y[8]);
     printf("[%7.2fs] gesture=%-13s  T:%d I:%d M:%d R:%d P:%d  pinch=%.3f\n",
