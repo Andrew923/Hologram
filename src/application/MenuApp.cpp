@@ -28,7 +28,7 @@ static constexpr float GLIDE_RATE      = 0.20f;             // per-frame ease to
 // Where on the carousel ring the "selected" position sits, in radians
 // around the Y axis. 0 = +Z (front), π/2 = +X (right), π = back,
 // -π/2 = left. Tweak if the rotor's user-facing direction differs.
-static constexpr float SELECTION_ANGLE = (float)M_PI / 2.0f;
+static constexpr float SELECTION_ANGLE = (float)-M_PI / 2.0f;
 
 // -----------------------------------------------------------------------
 // Icon kinds — keep in sync with iconKindForId() and drawIcon().
