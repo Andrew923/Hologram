@@ -117,10 +117,10 @@ static void printDetection(double tSec, const SharedHandData& hand, Gesture g)
     // Use the same rotation-invariant helpers the detector uses, so the
     // flags we print are exactly what classified the gesture.
     bool tu = gd_thumbExtended(hand);
-    bool iu = gd_fingerExtended(hand, 5,  6,  8);
-    bool mu = gd_fingerExtended(hand, 9,  10, 12);
-    bool ru = gd_fingerExtended(hand, 13, 14, 16);
-    bool pu = gd_fingerExtended(hand, 17, 18, 20);
+    bool iu = gd_fingerExtended(hand, 5,  6,  7,  8);
+    bool mu = gd_fingerExtended(hand, 9,  10, 11, 12);
+    bool ru = gd_fingerExtended(hand, 13, 14, 15, 16);
+    bool pu = gd_fingerExtended(hand, 17, 18, 19, 20);
     float pd = std::hypot(hand.lm_x[4] - hand.lm_x[8],
                           hand.lm_y[4] - hand.lm_y[8]);
     printf("[%7.2fs] gesture=%-13s  T:%d I:%d M:%d R:%d P:%d  pinch=%.3f\n",

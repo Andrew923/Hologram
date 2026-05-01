@@ -44,49 +44,61 @@ inline const char* gestureName(Gesture g)
 // Rotation-invariant primitives.
 //
 // The rig's camera looks straight up, so the user can hold their hand at
-// any rotational orientation in the image plane. Tests that rely on
-// "fingers point up = smaller lm_y" don't work — instead we compare
-// distances along the hand's own structure:
+// any rotational orientation in the image plane. Tests that rely on a
+// fixed image axis don't work, and pure tip-distance ratios fail for the
+// thumb (curled thumbs rotate across the palm rather than fold back, so
+// CMC→tip distance stays similar to CMC→MCP × 3).
 //
-//   When a finger is extended, its tip sits roughly the full bone length
-//   away from the MCP knuckle (tip ≈ 3× the MCP→PIP distance).
-//   When curled, the tip folds back toward the MCP (tip ≈ 1× MCP→PIP).
+// Instead we test the angle at each joint via the dot product of the two
+// adjacent bone segments:
 //
-// FINGER_EXT_RATIO is the threshold; landmark distances ratio above it
-// counts as extended. Same idea for the thumb (CMC → MCP vs CMC → tip).
-// PINCH detection (thumb-tip ↔ index-tip distance) is already
-// rotation-invariant so it stays as-is.
+//   straight finger  → bones are collinear, cos(angle) ≈ +1
+//   90° bent         → cos = 0
+//   fully curled     → bones fold back, cos < 0
+//
+// A finger counts as extended only when BOTH joints (PIP and DIP for
+// fingers; MCP and IP for the thumb) are above EXT_COS_THRESHOLD. This
+// rejects partially-bent fingers and the false-thumb case.
+//
+// PINCH (thumb-tip ↔ index-tip 2D distance) is already
+// rotation-invariant; threshold tightened to filter transients.
 // -----------------------------------------------------------------------
 
-inline constexpr float PINCH_DIST_THRESHOLD = 0.05f;  // normalised image units
-inline constexpr float FINGER_EXT_RATIO     = 1.7f;   // tip:knuckle distance ratio
+inline constexpr float PINCH_DIST_THRESHOLD = 0.04f;  // normalised image units
+inline constexpr float EXT_COS_THRESHOLD    = 0.6f;   // cos > 0.6  ⇒  joint < 53°
 
-inline float gd_lmDist(const SharedHandData& h, int a, int b)
+// Cosine of the angle between bone (a→b) and bone (b→c). +1 = collinear
+// (straight), 0 = right angle, −1 = folded back. Returns 1.0 for
+// degenerate (zero-length) segments so they're treated as straight.
+inline float gd_boneCos(const SharedHandData& h, int a, int b, int c)
 {
-    float dx = h.lm_x[a] - h.lm_x[b];
-    float dy = h.lm_y[a] - h.lm_y[b];
-    return sqrtf(dx * dx + dy * dy);
+    float ax = h.lm_x[b] - h.lm_x[a];
+    float ay = h.lm_y[b] - h.lm_y[a];
+    float cx = h.lm_x[c] - h.lm_x[b];
+    float cy = h.lm_y[c] - h.lm_y[b];
+    float la = sqrtf(ax * ax + ay * ay);
+    float lc = sqrtf(cx * cx + cy * cy);
+    if (la < 1e-3f || lc < 1e-3f) return 1.0f;
+    return (ax * cx + ay * cy) / (la * lc);
 }
 
-// True if a non-thumb finger is extended. mcp/pip/tip are the MediaPipe
-// landmark indices for that finger (e.g. index = 5/6/8).
-inline bool gd_fingerExtended(const SharedHandData& h, int mcp, int pip, int tip)
+// Non-thumb finger extended ⇔ both PIP and DIP joints nearly straight.
+// Pass the four landmark indices for that finger (e.g. index = 5/6/7/8).
+inline bool gd_fingerExtended(const SharedHandData& h,
+                              int mcp, int pip, int dip, int tip)
 {
-    float dPip = gd_lmDist(h, mcp, pip);
-    float dTip = gd_lmDist(h, mcp, tip);
-    if (dPip < 1e-4f) return false;
-    return dTip > FINGER_EXT_RATIO * dPip;
+    return gd_boneCos(h, mcp, pip, dip) > EXT_COS_THRESHOLD &&
+           gd_boneCos(h, pip, dip, tip) > EXT_COS_THRESHOLD;
 }
 
-// Thumb has a different bone arrangement (CMC=1, MCP=2, IP=3, Tip=4).
-// Same logic: extended if the tip is much farther from the CMC base than
-// the first knuckle is.
+// Thumb (CMC=1, MCP=2, IP=3, Tip=4): both MCP and IP joints nearly
+// straight. Distance ratios fail here because curling the thumb across
+// the palm doesn't shorten CMC→tip much — the tip just rotates rather
+// than folding back over the base.
 inline bool gd_thumbExtended(const SharedHandData& h)
 {
-    float dMcp = gd_lmDist(h, 1, 2);
-    float dTip = gd_lmDist(h, 1, 4);
-    if (dMcp < 1e-4f) return false;
-    return dTip > FINGER_EXT_RATIO * dMcp;
+    return gd_boneCos(h, 1, 2, 3) > EXT_COS_THRESHOLD &&
+           gd_boneCos(h, 2, 3, 4) > EXT_COS_THRESHOLD;
 }
 
 // -----------------------------------------------------------------------
@@ -111,10 +123,10 @@ inline Gesture detectGesture(const SharedHandData& hand)
     if (pinchDist < PINCH_DIST_THRESHOLD) return Gesture::PINCH;
 
     bool thumbExt  = gd_thumbExtended(hand);
-    bool indexExt  = gd_fingerExtended(hand, 5,  6,  8);
-    bool middleExt = gd_fingerExtended(hand, 9,  10, 12);
-    bool ringExt   = gd_fingerExtended(hand, 13, 14, 16);
-    bool pinkyExt  = gd_fingerExtended(hand, 17, 18, 20);
+    bool indexExt  = gd_fingerExtended(hand, 5,  6,  7,  8);
+    bool middleExt = gd_fingerExtended(hand, 9,  10, 11, 12);
+    bool ringExt   = gd_fingerExtended(hand, 13, 14, 15, 16);
+    bool pinkyExt  = gd_fingerExtended(hand, 17, 18, 19, 20);
 
     int fingerCount = (int)indexExt + (int)middleExt + (int)ringExt + (int)pinkyExt;
 
