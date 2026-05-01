@@ -44,7 +44,14 @@ inline const char* gestureName(Gesture g)
 // detectGesture — classify the current hand pose.
 //
 // Uses raw MediaPipe normalized coordinates (lm_x/lm_y in [0,1]).
-// Y increases downward, so a finger pointing up has tip.y < pip.y.
+//
+// IMPORTANT: this rig's camera is mounted under the rotor looking up,
+// and after the hand_tracker.py horizontal flip the resulting image has
+// world-up at *larger* lm_y values (the inverse of MediaPipe's default
+// top-left-origin convention). All the "finger extended" / "wrist below"
+// tests below are therefore inverted from how you'd see them written in
+// other MediaPipe tutorials. If you re-mount the camera, flip the
+// comparison signs back.
 //
 // Landmark indices (MediaPipe native order):
 //   0=wrist
@@ -63,21 +70,21 @@ inline Gesture detectGesture(const SharedHandData& hand)
                              hand.lm_y[4] - hand.lm_y[8]);
     if (pinchDist < 0.05f) return Gesture::PINCH;
 
-    // --- Finger extension (tip above PIP/IP joint = smaller Y value) ---
-    // Thumb: tip(4) above MCP(2)
-    bool thumbUp  = hand.lm_y[4]  < hand.lm_y[2];
-    // Non-thumb fingers: tip above PIP joint
-    bool indexUp  = hand.lm_y[8]  < hand.lm_y[6];
-    bool middleUp = hand.lm_y[12] < hand.lm_y[10];
-    bool ringUp   = hand.lm_y[16] < hand.lm_y[14];
-    bool pinkyUp  = hand.lm_y[20] < hand.lm_y[18];
+    // --- Finger extension (tip "above" PIP/IP in world = LARGER lm_y
+    // because the camera is inverted; see header note). ---
+    bool thumbUp  = hand.lm_y[4]  > hand.lm_y[2];
+    bool indexUp  = hand.lm_y[8]  > hand.lm_y[6];
+    bool middleUp = hand.lm_y[12] > hand.lm_y[10];
+    bool ringUp   = hand.lm_y[16] > hand.lm_y[14];
+    bool pinkyUp  = hand.lm_y[20] > hand.lm_y[18];
 
     int fingerCount = (int)indexUp + (int)middleUp + (int)ringUp + (int)pinkyUp;
 
     // --- Fist variants (no non-thumb fingers extended) ---
     if (fingerCount == 0 && !thumbUp) {
-        // Upward fist: wrist(0) is below knuckles (wrist.y > middle_mcp.y)
-        bool wristBelow = hand.lm_y[0] > hand.lm_y[9];
+        // Upward fist: wrist(0) is below knuckles in world = wrist.y is
+        // SMALLER than middle_mcp.y here.
+        bool wristBelow = hand.lm_y[0] < hand.lm_y[9];
         return wristBelow ? Gesture::FIST_UP : Gesture::FIST;
     }
 
